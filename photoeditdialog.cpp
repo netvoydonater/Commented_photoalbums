@@ -96,11 +96,6 @@ void PhotoEditDialog::setupUI() {
     connect(cropBtn, &QPushButton::clicked, this, &PhotoEditDialog::applyCrop);
     actionsLayout->addWidget(cropBtn);
 
-    QPushButton* deleteBtn = new QPushButton("Удалить", rightWidget);
-    deleteBtn->setObjectName("actionButton");
-    connect(deleteBtn, &QPushButton::clicked, this, &PhotoEditDialog::deletePhoto);
-    actionsLayout->addWidget(deleteBtn);
-
     rightLayout->addLayout(actionsLayout);
 
     // Миниатюра
@@ -191,17 +186,6 @@ void PhotoEditDialog::saveChanges() {
 void PhotoEditDialog::addToFavorites() {
     emit addToFavoritesRequested(photo);
     QMessageBox::information(this, "Избранное", "Фото добавлено в избранное");
-}
-
-void PhotoEditDialog::deletePhoto() {
-    QMessageBox::StandardButton reply = QMessageBox::question(this, "Удаление",
-        "Вы уверены, что хотите удалить это фото?",
-        QMessageBox::Yes | QMessageBox::No);
-
-    if (reply == QMessageBox::Yes) {
-        // Удаление будет обработано в главном окне
-        reject();
-    }
 }
 
 void PhotoEditDialog::applyCrop() {

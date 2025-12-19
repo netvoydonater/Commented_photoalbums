@@ -23,8 +23,6 @@ private slots:
     void applyCrop();
     void saveChanges();
     void addToFavorites();
-    void deletePhoto();
-
 private:
     Photo* photo;
     QGraphicsView* view;
