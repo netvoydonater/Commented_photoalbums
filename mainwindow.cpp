@@ -32,25 +32,31 @@
 #include <QKeyEvent>
 #include <algorithm>
 
-MainWindow::MainWindow(QWidget* parent)
+MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent),
       currentUser(nullptr),
       currentStrategy(new ByTagStrategy()),
       selectedAlbum(nullptr),
       selectedPhoto(nullptr),
-      currentSection(AllPhotos) {
+      currentSection(AllPhotos)
+{
     LoginDialog login(this);
-    if (login.exec() == QDialog::Accepted) {
+    if (login.exec() == QDialog::Accepted)
+    {
         currentUser = User::loadFromJson(login.getUserName() + ".json");
-        if (!currentUser) currentUser = new User(login.getUserName());
-    } else {
+        if (!currentUser)
+            currentUser = new User(login.getUserName());
+    }
+    else
+    {
         qApp->quit();
     }
     setupUI();
     applyStyleSheet();
     // Заполняем дерево альбомов (скрываем технический корень)
     albumsTree->clear();
-    for (Album* sub : currentUser->getRootAlbum()->getSubAlbums()) {
+    for (Album *sub : currentUser->getRootAlbum()->getSubAlbums())
+    {
         populateTree(sub);
     }
 
@@ -62,12 +68,14 @@ MainWindow::MainWindow(QWidget* parent)
     populateRecent();
 }
 
-MainWindow::~MainWindow() {
+MainWindow::~MainWindow()
+{
     currentUser->saveToJson(currentUser->getName() + ".json");
     delete currentUser;
 }
 
-void MainWindow::setupUI() {
+void MainWindow::setupUI()
+{
     setWindowTitle("Фотоальбомы с комментариями");
     resize(1400, 900);
 
@@ -75,26 +83,26 @@ void MainWindow::setupUI() {
     setAcceptDrops(true);
 
     // Главный виджет
-    QWidget* centralWidget = new QWidget(this);
-    QVBoxLayout* mainVerticalLayout = new QVBoxLayout(centralWidget);
+    QWidget *centralWidget = new QWidget(this);
+    QVBoxLayout *mainVerticalLayout = new QVBoxLayout(centralWidget);
     mainVerticalLayout->setContentsMargins(0, 0, 0, 0);
     mainVerticalLayout->setSpacing(0);
 
     // === ВЕРХНЯЯ ПАНЕЛЬ (Шапка) ===
-    QWidget* headerWidget = new QWidget(this);
+    QWidget *headerWidget = new QWidget(this);
     headerWidget->setObjectName("header");
     headerWidget->setMinimumHeight(60);
-    QHBoxLayout* headerLayout = new QHBoxLayout(headerWidget);
+    QHBoxLayout *headerLayout = new QHBoxLayout(headerWidget);
     headerLayout->setContentsMargins(20, 10, 20, 10);
 
     // Информация о пользователе с аватаром
-    QWidget* userWidget = new QWidget(this);
-    QHBoxLayout* userLayout = new QHBoxLayout(userWidget);
+    QWidget *userWidget = new QWidget(this);
+    QHBoxLayout *userLayout = new QHBoxLayout(userWidget);
     userLayout->setContentsMargins(0, 0, 0, 0);
     userLayout->setSpacing(10);
 
     // Аватар (первая буква имени)
-    QLabel* avatarLabel = new QLabel(this);
+    avatarLabel = new QLabel(this);
     avatarLabel->setObjectName("avatarLabel");
     avatarLabel->setFixedSize(45, 45);
     avatarLabel->setAlignment(Qt::AlignCenter);
@@ -107,7 +115,7 @@ void MainWindow::setupUI() {
     userLabel->setObjectName("userLabel");
     int photoCount = manager.getAllPhotos(currentUser->getRootAlbum()).size();
     userLabel->setText(currentUser->getName() + "\nЛокальное хранилище: " +
-                      QString::number(photoCount) + " фото");
+                       QString::number(photoCount) + " фото");
     userLayout->addWidget(userLabel);
 
     // Поисковая строка
@@ -131,16 +139,16 @@ void MainWindow::setupUI() {
     addButton->setFixedSize(50, 50);
     addButton->setToolTip("Добавить");
 
-    QMenu* addMenu = new QMenu(this);
+    QMenu *addMenu = new QMenu(this);
     addMenu->setObjectName("addMenu");
 
-    QAction* importAction = addMenu->addAction("Импортировать фото...");
+    QAction *importAction = addMenu->addAction("Импортировать фото...");
     connect(importAction, &QAction::triggered, this, &MainWindow::addPhoto);
 
-    QAction* albumAction = addMenu->addAction("Создать альбом...");
+    QAction *albumAction = addMenu->addAction("Создать альбом...");
     connect(albumAction, &QAction::triggered, this, &MainWindow::createAlbum);
 
-    QAction* folderAction = addMenu->addAction("Создать папку...");
+    QAction *folderAction = addMenu->addAction("Создать папку...");
     connect(folderAction, &QAction::triggered, this, &MainWindow::createFolder);
 
     addButton->setMenu(addMenu);
@@ -154,8 +162,8 @@ void MainWindow::setupUI() {
     mainVerticalLayout->addWidget(headerWidget);
 
     // === ОСНОВНАЯ ЧАСТЬ (Три панели) ===
-    QWidget* contentWidget = new QWidget(this);
-    QHBoxLayout* contentLayout = new QHBoxLayout(contentWidget);
+    QWidget *contentWidget = new QWidget(this);
+    QHBoxLayout *contentLayout = new QHBoxLayout(contentWidget);
     contentLayout->setContentsMargins(0, 0, 0, 0);
     contentLayout->setSpacing(0);
 
@@ -164,7 +172,7 @@ void MainWindow::setupUI() {
     leftPanel->setObjectName("leftPanel");
     leftPanel->setMinimumWidth(240);
     leftPanel->setMaximumWidth(240);
-    QVBoxLayout* leftLayout = new QVBoxLayout(leftPanel);
+    QVBoxLayout *leftLayout = new QVBoxLayout(leftPanel);
     leftLayout->setContentsMargins(10, 10, 10, 10);
 
     // Список навигации
@@ -172,19 +180,19 @@ void MainWindow::setupUI() {
     navigationList->setObjectName("navigationList");
 
     // Добавляем пункты навигации
-    QListWidgetItem* allPhotosItem = new QListWidgetItem("📷 Все фотографии");
+    QListWidgetItem *allPhotosItem = new QListWidgetItem("📷 Все фотографии");
     allPhotosItem->setData(Qt::UserRole, AllPhotos);
     navigationList->addItem(allPhotosItem);
 
-    QListWidgetItem* favoritesItem = new QListWidgetItem("⭐ Избранное");
+    QListWidgetItem *favoritesItem = new QListWidgetItem("⭐ Избранное");
     favoritesItem->setData(Qt::UserRole, Favorites);
     navigationList->addItem(favoritesItem);
 
-    QListWidgetItem* recentItem = new QListWidgetItem("🕐 Недавно добавленное");
+    QListWidgetItem *recentItem = new QListWidgetItem("🕐 Недавно добавленное");
     recentItem->setData(Qt::UserRole, Recent);
     navigationList->addItem(recentItem);
 
-    QListWidgetItem* tagsItem = new QListWidgetItem("📍 Теги");
+    QListWidgetItem *tagsItem = new QListWidgetItem("📍 Теги");
     tagsItem->setData(Qt::UserRole, Tags);
     navigationList->addItem(tagsItem);
 
@@ -193,19 +201,22 @@ void MainWindow::setupUI() {
     leftLayout->addWidget(navigationList);
 
     // Дерево альбомов
-    QListWidgetItem* albumsItem = new QListWidgetItem("📁 Альбомы");
+    QListWidgetItem *albumsItem = new QListWidgetItem("📁 Альбомы");
     albumsItem->setData(Qt::UserRole, Albums);
     navigationList->addItem(albumsItem);
 
     albumsTree = new QTreeWidget(this);
     albumsTree->setObjectName("albumsTree");
     albumsTree->setHeaderHidden(true);
+    albumsTree->setContextMenuPolicy(Qt::CustomContextMenu);
     connect(albumsTree, &QTreeWidget::itemClicked, this, &MainWindow::onAlbumTreeItemClicked);
+    connect(albumsTree, &QTreeWidget::itemDoubleClicked, this, &MainWindow::onAlbumTreeItemDoubleClicked);
+    connect(albumsTree, &QTreeWidget::customContextMenuRequested, this, &MainWindow::onAlbumTreeContextMenu);
 
     leftLayout->addWidget(albumsTree);
 
     // Копирайт внизу
-    QLabel* copyrightLabel = new QLabel("© Все права защищены\n2025 год", this);
+    QLabel *copyrightLabel = new QLabel("© Все права защищены\n2025 год", this);
     copyrightLabel->setObjectName("copyrightLabel");
     copyrightLabel->setAlignment(Qt::AlignCenter);
     leftLayout->addWidget(copyrightLabel);
@@ -213,20 +224,20 @@ void MainWindow::setupUI() {
     contentLayout->addWidget(leftPanel);
 
     // --- ЦЕНТРАЛЬНАЯ ПАНЕЛЬ (Вкладки) ---
-    QWidget* centerPanel = new QWidget(this);
+    QWidget *centerPanel = new QWidget(this);
     centerPanel->setObjectName("centerPanel");
-    QVBoxLayout* centerLayout = new QVBoxLayout(centerPanel);
+    QVBoxLayout *centerLayout = new QVBoxLayout(centerPanel);
     centerLayout->setContentsMargins(20, 10, 20, 10);
 
     tabWidget = new QTabWidget(this);
     tabWidget->setObjectName("tabWidget");
 
     // Создаем вкладки (только Лента и Сетка)
-    QWidget* feedTab = new QWidget();
+    QWidget *feedTab = new QWidget();
     feedTab->setObjectName("feedTab");
     tabWidget->addTab(feedTab, "Лента");
 
-    QWidget* gridTab = new QWidget();
+    QWidget *gridTab = new QWidget();
     gridTab->setObjectName("gridTab");
     tabWidget->addTab(gridTab, "Сетка");
 
@@ -240,10 +251,10 @@ void MainWindow::setupUI() {
     propertiesPanel->setObjectName("propertiesPanel");
     propertiesPanel->setMinimumWidth(300);
     propertiesPanel->setMaximumWidth(300);
-    QVBoxLayout* propsLayout = new QVBoxLayout(propertiesPanel);
+    QVBoxLayout *propsLayout = new QVBoxLayout(propertiesPanel);
     propsLayout->setContentsMargins(10, 10, 10, 10);
 
-    QLabel* propsPlaceholder = new QLabel("Откройте любой элемент, чтобы\nпосмотреть сведения", this);
+    QLabel *propsPlaceholder = new QLabel("Откройте любой элемент, чтобы\nпосмотреть сведения", this);
     propsPlaceholder->setAlignment(Qt::AlignCenter);
     propsPlaceholder->setWordWrap(true);
     propsLayout->addWidget(propsPlaceholder);
@@ -256,34 +267,38 @@ void MainWindow::setupUI() {
     setCentralWidget(centralWidget);
 
     // Меню
-    QMenuBar* menuBar = new QMenuBar(this);
-    QMenu* userMenu = menuBar->addMenu("Пользователь");
+    QMenuBar *menuBar = new QMenuBar(this);
+    QMenu *userMenu = menuBar->addMenu("Пользователь");
     userMenu->addAction("Сменить пользователя", this, &MainWindow::switchUser);
     setMenuBar(menuBar);
 }
 
-void MainWindow::populateTree(Album* album, QTreeWidgetItem* parentItem) {
-    QTreeWidgetItem* item = parentItem ? new QTreeWidgetItem(parentItem) : new QTreeWidgetItem(albumsTree);
+void MainWindow::populateTree(Album *album, QTreeWidgetItem *parentItem)
+{
+    QTreeWidgetItem *item = parentItem ? new QTreeWidgetItem(parentItem) : new QTreeWidgetItem(albumsTree);
     item->setText(0, album->getName());
     item->setData(0, Qt::UserRole, QVariant::fromValue(album));
-    for (const auto* sub : album->getSubAlbums()) {
-        populateTree(const_cast<Album*>(sub), item);
+    for (const auto *sub : album->getSubAlbums())
+    {
+        populateTree(const_cast<Album *>(sub), item);
     }
 }
 
-void MainWindow::addPhoto() {
+void MainWindow::addPhoto()
+{
     QStringList files = QFileDialog::getOpenFileNames(
         this,
         "Импортировать фото",
         "",
-        "Изображения (*.png *.jpg *.jpeg *.bmp *.gif *.webp);;Все файлы (*.*)"
-    );
+        "Изображения (*.png *.jpg *.jpeg *.bmp *.gif *.webp);;Все файлы (*.*)");
 
-    if (!files.isEmpty()) {
-        Album* targetAlbum = selectedAlbum ? selectedAlbum : currentUser->getRootAlbum();
+    if (!files.isEmpty())
+    {
+        Album *targetAlbum = selectedAlbum ? selectedAlbum : currentUser->getRootAlbum();
 
-        for (const QString& file : files) {
-            Photo* newPhoto = new Photo(file, "", QDateTime::currentDateTime());
+        for (const QString &file : files)
+        {
+            Photo *newPhoto = new Photo(file, "", QDateTime::currentDateTime());
             targetAlbum->addPhoto(newPhoto);
         }
 
@@ -295,86 +310,172 @@ void MainWindow::addPhoto() {
         int photoCount = manager.getAllPhotos(currentUser->getRootAlbum()).size();
 
         userLabel->setText(currentUser->getName() + "\nЛокальное хранилище: " +
-                          QString::number(photoCount) + " фото");
+                           QString::number(photoCount) + " фото");
 
         // Уведомление
         QString message = files.size() == 1
-            ? "Добавлено 1 фото"
-            : "Добавлено " + QString::number(files.size()) + " фото";
+                              ? "Добавлено 1 фото"
+                              : "Добавлено " + QString::number(files.size()) + " фото";
         QMessageBox::information(this, "Импорт фото", message);
     }
 }
 
-void MainWindow::createAlbum() {
+void MainWindow::createAlbum()
+{
     bool ok;
-        QString name = QInputDialog::getText(
-            this, "Новый альбом", "Название:", QLineEdit::Normal, "", &ok
-        );
+    QString name = QInputDialog::getText(
+        this, "Новый альбом", "Название:", QLineEdit::Normal, "", &ok);
 
-        if (!ok || name.trimmed().isEmpty())
-            return;
+    if (!ok || name.trimmed().isEmpty())
+        return;
 
-        int year = QDate::currentDate().year();
-        Album* yearAlbum = getOrCreateYearAlbum(year);
+    int year = QDate::currentDate().year();
+    Album *yearAlbum = getOrCreateYearAlbum(year);
 
-        yearAlbum->addSubAlbum(new Album(name));
+    yearAlbum->addSubAlbum(new Album(name));
 
-        rebuildAlbumsTree();
-        updateCenterPanel();
+    rebuildAlbumsTree();
+    updateCenterPanel();
 }
 
-void MainWindow::createFolder() {
+void MainWindow::createFolder()
+{
     createAlbum(); // Папка - то же, что альбом
 }
 
-void MainWindow::search() {
-    QString query = searchBar->text();
-    if (QDate::fromString(query, "yyyy-MM-dd").isValid()) {
-        delete currentStrategy;
-        currentStrategy = new ByDateStrategy();
-    } else if (query.contains("desc:")) {
-        delete currentStrategy;
-        currentStrategy = new ByDescriptionStrategy();
-        query = query.mid(5);
-    } else {
-        delete currentStrategy;
-        currentStrategy = new ByTagStrategy();
+void MainWindow::search()
+{
+    QString query = searchBar->text().trimmed();
+    if (query.isEmpty())
+        return;
+
+    // Сброс предыдущего режима поиска
+    searchResults.clear();
+    inSearchMode = false;
+
+    // Разбираем запрос: имя (подстрока), опционально дата yyyy-MM-dd и/или тег (tag:имя или #имя)
+    QStringList tokens = query.split(QRegExp("\s+"), QString::SkipEmptyParts);
+    QString namePart;
+    QDate datePart;
+    QString tagPart;
+    for (const QString &t : tokens)
+    {
+        if (QDate::fromString(t, "yyyy-MM-dd").isValid())
+        {
+            datePart = QDate::fromString(t, "yyyy-MM-dd");
+        }
+        else if (t.startsWith("tag:", Qt::CaseInsensitive))
+        {
+            tagPart = t.mid(4);
+        }
+        else if (t.startsWith('#'))
+        {
+            tagPart = t.mid(1);
+        }
+        else if (namePart.isEmpty())
+        {
+            namePart = t;
+        }
+        else if (tagPart.isEmpty())
+        {
+            tagPart = t;
+        }
     }
 
-    // Проверяем, есть ли результаты поиска
-    QList<Photo*> results = manager.searchPhotos(currentUser->getRootAlbum(), currentStrategy, query);
-    if (results.isEmpty()) {
+    QList<Photo *> all = manager.getAllPhotos(currentUser->getRootAlbum());
+    for (Photo *p : all)
+    {
+        bool ok = true;
+        if (!namePart.isEmpty())
+        {
+            if (!QFileInfo(p->getFilePath()).fileName().contains(namePart, Qt::CaseInsensitive))
+                ok = false;
+        }
+        if (ok && datePart.isValid())
+        {
+            if (p->getDate().date() != datePart)
+                ok = false;
+        }
+        if (ok && !tagPart.isEmpty())
+        {
+            bool has = false;
+            for (const Tag &tg : p->getTags())
+            {
+                if (tg.getName().compare(tagPart, Qt::CaseInsensitive) == 0)
+                {
+                    has = true;
+                    break;
+                }
+            }
+            if (!has)
+                ok = false;
+        }
+        if (ok)
+            searchResults.append(p);
+    }
+
+    if (searchResults.isEmpty())
+    {
         QMessageBox::information(this, "Поиск", "Элемент не найден");
         return;
     }
 
-    // Поиск и обновление (результаты в current panel)
+    inSearchMode = true;
+    currentSection = AllPhotos;
+    selectedAlbum = nullptr;
     updateCenterPanel();
 }
 
-void MainWindow::switchUser() {
+void MainWindow::switchUser()
+{
     currentUser->saveToJson(currentUser->getName() + ".json");
     LoginDialog login(this);
-    if (login.exec() == QDialog::Accepted) {
+    if (login.exec() == QDialog::Accepted)
+    {
         delete currentUser;
         currentUser = User::loadFromJson(login.getUserName() + ".json");
-        if (!currentUser) currentUser = new User(login.getUserName());
+        if (!currentUser)
+            currentUser = new User(login.getUserName());
+
+        // Сброс состояния предыдущего пользователя
+        selectedAlbum = nullptr;
+        selectedPhoto = nullptr;
+        favorites.clear();
+        searchResults.clear();
+        inSearchMode = false;
+
         // Перестраиваем дерево альбомов без технического корня
         albumsTree->clear();
-        for (Album* sub : currentUser->getRootAlbum()->getSubAlbums()) {
+        for (Album *sub : currentUser->getRootAlbum()->getSubAlbums())
+        {
             populateTree(sub);
         }
+
+        // Обновляем шапку (аватар и счётчик)
+        QString firstLetter = currentUser->getName().left(1).toUpper();
+        if (avatarLabel)
+            avatarLabel->setText(firstLetter);
+        int photoCount = manager.getAllPhotos(currentUser->getRootAlbum()).size();
+        userLabel->setText(currentUser->getName() + "\nЛокальное хранилище: " +
+                           QString::number(photoCount) + " фото");
+
         updateCenterPanel();
     }
 }
 
-void MainWindow::deleteItem() {
+void MainWindow::deleteItem()
+{
     QString name;
-    if (selectedPhoto) {
+    if (selectedPhoto)
+    {
         name = QFileInfo(selectedPhoto->getFilePath()).fileName();
-    } else if (selectedAlbum) {
+    }
+    else if (selectedAlbum)
+    {
         name = selectedAlbum->getName();
-    } else {
+    }
+    else
+    {
         return;
     }
 
@@ -383,74 +484,91 @@ void MainWindow::deleteItem() {
         this,
         "Удаление",
         "Удалить " + name + "?",
-        QMessageBox::Yes | QMessageBox::No
-    );
+        QMessageBox::Yes | QMessageBox::No);
 
-    if (reply == QMessageBox::Yes) {
-        if (selectedPhoto) {
+    if (reply == QMessageBox::Yes)
+    {
+        if (selectedPhoto)
+        {
             // Находим альбом, в котором находится это фото
-            Album* albumWithPhoto = nullptr;
-            QList<Album*> stack;
+            Album *albumWithPhoto = nullptr;
+            QList<Album *> stack;
             stack.append(currentUser->getRootAlbum());
-            while (!stack.isEmpty() && !albumWithPhoto) {
-                Album* a = stack.takeLast();
-                if (a->getPhotos().contains(selectedPhoto)) {
+            while (!stack.isEmpty() && !albumWithPhoto)
+            {
+                Album *a = stack.takeLast();
+                if (a->getPhotos().contains(selectedPhoto))
+                {
                     albumWithPhoto = a;
                     break;
                 }
-                for (Album* sub : a->getSubAlbums()) {
+                for (Album *sub : a->getSubAlbums())
+                {
                     stack.append(sub);
                 }
             }
 
-            if (albumWithPhoto) {
+            if (albumWithPhoto)
+            {
                 albumWithPhoto->removePhoto(selectedPhoto);
             }
             delete selectedPhoto;
             selectedPhoto = nullptr;
-        } else if (selectedAlbum) {
-            currentUser->getRootAlbum()->removeSubAlbum(selectedAlbum);
-            delete selectedAlbum;
-            selectedAlbum = nullptr;
+        }
+        else if (selectedAlbum)
+        {
+            // Удаляем альбом рекурсивно из родителя
+            if (removeAlbumFromParent(selectedAlbum))
+            {
+                delete selectedAlbum;
+                selectedAlbum = nullptr;
+            }
         }
         // Перестраиваем дерево альбомов без технического корня
         albumsTree->clear();
-        for (Album* sub : currentUser->getRootAlbum()->getSubAlbums()) {
+        for (Album *sub : currentUser->getRootAlbum()->getSubAlbums())
+        {
             populateTree(sub);
         }
         updateCenterPanel();
     }
 }
 
-void MainWindow::editPhoto() {
-    if (!selectedPhoto) return;
-    PhotoEditDialog edit(selectedPhoto, this);
+void MainWindow::editPhoto()
+{
+    if (!selectedPhoto)
+        return;
+    PhotoEditDialog edit(selectedPhoto, currentUser->getRootAlbum(), this);
     QObject::connect(&edit, &PhotoEditDialog::addToFavoritesRequested,
                      this, &MainWindow::addToFavorites);
     edit.exec();
+    // После возможного перемещения/переименования обновляем интерфейс
     updateCenterPanel();
+    updatePropertiesPanel();
 }
 
-void MainWindow::showFullScreen(Photo* photo) {
-    if (!photo) return;
+void MainWindow::showFullScreen(Photo *photo)
+{
+    if (!photo)
+        return;
 
-    QDialog* fullDialog = new QDialog(this);
+    QDialog *fullDialog = new QDialog(this);
     fullDialog->setWindowFlags(Qt::Window | Qt::FramelessWindowHint);
     fullDialog->setAttribute(Qt::WA_DeleteOnClose);
     fullDialog->setStyleSheet("background-color: black;");
 
-    QVBoxLayout* layout = new QVBoxLayout(fullDialog);
+    QVBoxLayout *layout = new QVBoxLayout(fullDialog);
     layout->setContentsMargins(0, 0, 0, 0);
 
     // Верхняя панель с кнопкой закрытия
-    QWidget* topBar = new QWidget(fullDialog);
+    QWidget *topBar = new QWidget(fullDialog);
     topBar->setStyleSheet("background-color: rgba(0, 0, 0, 150);");
-    QHBoxLayout* topLayout = new QHBoxLayout(topBar);
+    QHBoxLayout *topLayout = new QHBoxLayout(topBar);
     topLayout->setContentsMargins(10, 10, 10, 10);
 
     topLayout->addStretch();
 
-    QPushButton* closeBtn = new QPushButton("✕", topBar);
+    QPushButton *closeBtn = new QPushButton("✕", topBar);
     closeBtn->setStyleSheet(R"(
         QPushButton {
             background-color: rgba(255,255,255,0.9);
@@ -472,7 +590,7 @@ void MainWindow::showFullScreen(Photo* photo) {
     layout->addWidget(topBar);
 
     // Изображение
-    QLabel* imageLabel = new QLabel(fullDialog);
+    QLabel *imageLabel = new QLabel(fullDialog);
     imageLabel->setAlignment(Qt::AlignCenter);
     QPixmap pixmap(photo->getFilePath());
 
@@ -486,135 +604,212 @@ void MainWindow::showFullScreen(Photo* photo) {
     fullDialog->showMaximized();
 }
 
-void MainWindow::onLeftPanelItemClicked(QListWidgetItem* item) {
+void MainWindow::onLeftPanelItemClicked(QListWidgetItem *item)
+{
     currentSection = static_cast<NavigationSection>(item->data(Qt::UserRole).toInt());
     selectedAlbum = nullptr;
 
-    switch(currentSection) {
-        case AllPhotos:
-            populateAllPhotos();
-            break;
-        case Favorites:
-            populateFavorites();
-            break;
-        case Recent:
-            populateRecent();
-            break;
-        case Tags:
-            populateTags();
-            break;
-        case Albums:
-            selectedAlbum = nullptr;
-            updateCenterPanel();
-            break;
+    switch (currentSection)
+    {
+    case AllPhotos:
+        populateAllPhotos();
+        break;
+    case Favorites:
+        populateFavorites();
+        break;
+    case Recent:
+        populateRecent();
+        break;
+    case Tags:
+        populateTags();
+        break;
+    case Albums:
+        selectedAlbum = nullptr;
+        updateCenterPanel();
+        break;
     }
 }
 
-void MainWindow::onAlbumTreeItemClicked(QTreeWidgetItem* item, int column) {
+void MainWindow::onAlbumTreeItemClicked(QTreeWidgetItem *item, int column)
+{
     Q_UNUSED(column);
-    Album* album = qvariant_cast<Album*>(item->data(0, Qt::UserRole));
+    Album *album = qvariant_cast<Album *>(item->data(0, Qt::UserRole));
     if (!album)
         return;
 
+    // Одинарный клик — просто выделение и показ свойств
     selectedAlbum = album;
     selectedPhoto = nullptr;
     currentSection = Albums;
+    updatePropertiesPanel();
+}
 
+void MainWindow::onAlbumTreeItemDoubleClicked(QTreeWidgetItem *item, int column)
+{
+    Q_UNUSED(column);
+    Album *album = qvariant_cast<Album *>(item->data(0, Qt::UserRole));
+    if (!album)
+        return;
+
+    // Двойной клик — вход в альбом (показываем вкладки: Лента/Сетка)
+    selectedAlbum = album;
+    selectedPhoto = nullptr;
+    currentSection = Albums;
     tabWidget->tabBar()->show();
-
     updateCenterPanel();
     updatePropertiesPanel();
 }
 
-void MainWindow::updateCenterPanel() {
+void MainWindow::onAlbumTreeContextMenu(const QPoint &pos)
+{
+    QTreeWidgetItem *item = albumsTree->itemAt(pos);
+    if (!item)
+        return;
+    Album *album = qvariant_cast<Album *>(item->data(0, Qt::UserRole));
+    if (!album)
+        return;
+
+    QMenu menu(this);
+    QAction *renameAct = menu.addAction("Переименовать");
+    QAction *delAct = menu.addAction("Удалить");
+
+    QAction *act = menu.exec(albumsTree->viewport()->mapToGlobal(pos));
+    if (act == renameAct)
+    {
+        bool ok;
+        QString name = QInputDialog::getText(this, "Переименовать альбом", "Новое имя:", QLineEdit::Normal, album->getName(), &ok);
+        if (ok && !name.trimmed().isEmpty())
+        {
+            album->setName(name);
+            rebuildAlbumsTree();
+            updateCenterPanel();
+        }
+    }
+    else if (act == delAct)
+    {
+        QMessageBox::StandardButton reply = QMessageBox::question(this, "Удаление", "Удалить альбом " + album->getName() + "?", QMessageBox::Yes | QMessageBox::No);
+        if (reply == QMessageBox::Yes)
+        {
+            if (removeAlbumFromParent(album))
+            {
+                delete album;
+                selectedAlbum = nullptr;
+                rebuildAlbumsTree();
+                updateCenterPanel();
+            }
+        }
+    }
+}
+
+void MainWindow::updateCenterPanel()
+{
     int index = tabWidget->currentIndex();
 
     bool showTabs =
-            currentSection == AllPhotos ||
-            currentSection == Favorites ||
-            currentSection == Recent ||
-            currentSection == Albums;
+        currentSection == AllPhotos ||
+        currentSection == Favorites ||
+        currentSection == Recent ||
+        (currentSection == Albums && selectedAlbum != nullptr);
 
-        tabWidget->tabBar()->setVisible(showTabs);
+    tabWidget->tabBar()->setVisible(showTabs);
 
-        QWidget* currentTab = tabWidget->widget(index);
+    QWidget *currentTab = tabWidget->widget(index);
 
-        // Очистка
-        if (QLayout* oldLayout = currentTab->layout()) {
-            QLayoutItem* it;
-            while ((it = oldLayout->takeAt(0))) {
+    // Очистка
+    if (QLayout *oldLayout = currentTab->layout())
+    {
+        QLayoutItem *it;
+        while ((it = oldLayout->takeAt(0)))
+        {
+            if (it->widget())
                 delete it->widget();
-                delete it;
-            }
-            delete oldLayout;
+            delete it;
+        }
+        delete oldLayout;
+    }
+
+    // Если раздел — Альбомы и альбом не выбран => отображаем список альбомов (без вкладок)
+    if (currentSection == Albums && !selectedAlbum)
+    {
+        tabWidget->tabBar()->setVisible(false);
+        renderAlbums(currentTab);
+        updatePropertiesPanel();
+        return;
+    }
+
+    // --- ТЕГИ ---
+    if (currentSection == Tags)
+    {
+        QVBoxLayout *layout = new QVBoxLayout(currentTab);
+        layout->setContentsMargins(20, 20, 20, 20);
+
+        QLabel *title = new QLabel("Теги", currentTab);
+        title->setObjectName("sectionTitle");
+        layout->addWidget(title);
+
+        QLineEdit *tagSearch = new QLineEdit(currentTab);
+        tagSearch->setPlaceholderText("Поиск по тегам…");
+        layout->addWidget(tagSearch);
+
+        QScrollArea *scroll = new QScrollArea(currentTab);
+        scroll->setWidgetResizable(true);
+
+        QWidget *content = new QWidget();
+        QVBoxLayout *contentLayout = new QVBoxLayout(content);
+
+        QSet<QString> tags;
+        for (Photo *p : manager.getAllPhotos(currentUser->getRootAlbum()))
+            for (const Tag &t : p->getTags())
+                tags.insert(t.getName());
+
+        if (tags.isEmpty())
+        {
+            QLabel *empty = new QLabel("Теги ещё не созданы", content);
+            empty->setObjectName("infoLabel");
+            contentLayout->addWidget(empty);
         }
 
-        // --- ТЕГИ ---
-        if (currentSection == Tags) {
-            QVBoxLayout* layout = new QVBoxLayout(currentTab);
-            layout->setContentsMargins(20, 20, 20, 20);
+        QStringList sorted = tags.values();
+        sorted.sort(Qt::CaseInsensitive);
 
-            QLabel* title = new QLabel("Теги", currentTab);
-            title->setObjectName("sectionTitle");
-            layout->addWidget(title);
-
-            QLineEdit* tagSearch = new QLineEdit(currentTab);
-            tagSearch->setPlaceholderText("Поиск по тегам…");
-            layout->addWidget(tagSearch);
-
-            QScrollArea* scroll = new QScrollArea(currentTab);
-            scroll->setWidgetResizable(true);
-
-            QWidget* content = new QWidget();
-            QVBoxLayout* contentLayout = new QVBoxLayout(content);
-
-            QSet<QString> tags;
-            for (Photo* p : manager.getAllPhotos(currentUser->getRootAlbum()))
-                for (const Tag& t : p->getTags())
-                    tags.insert(t.getName());
-
-            if (tags.isEmpty()) {
-                QLabel* empty = new QLabel("Теги ещё не созданы", content);
-                empty->setObjectName("infoLabel");
-                contentLayout->addWidget(empty);
-            }
-
-            QStringList sorted = tags.values();
-            sorted.sort(Qt::CaseInsensitive);
-
-            for (const QString& t : sorted) {
-                QLabel* lbl = new QLabel("🏷 " + t, content);
-                lbl->setObjectName("tagLabel");
-                contentLayout->addWidget(lbl);
-            }
-
-            contentLayout->addStretch();
-            scroll->setWidget(content);
-            layout->addWidget(scroll);
-
-            updatePropertiesPanel();
-            return;
+        for (const QString &t : sorted)
+        {
+            QLabel *lbl = new QLabel("🏷 " + t, content);
+            lbl->setObjectName("tagLabel");
+            contentLayout->addWidget(lbl);
         }
 
-        // --- ОБЫЧНЫЕ РЕЖИМЫ ---
-        QVBoxLayout* layout = new QVBoxLayout(currentTab);
-        layout->setContentsMargins(10, 10, 10, 10);
-
-        if (index == 0)
-            renderFeed(currentTab);
-        else if (index == 1)
-            renderGrid(currentTab);
+        contentLayout->addStretch();
+        scroll->setWidget(content);
+        layout->addWidget(scroll);
 
         updatePropertiesPanel();
+        return;
+    }
+
+    // --- ОБЫЧНЫЕ РЕЖИМЫ ---
+    QVBoxLayout *layout = new QVBoxLayout(currentTab);
+    layout->setContentsMargins(10, 10, 10, 10);
+
+    if (index == 0)
+        renderFeed(currentTab);
+    else if (index == 1)
+        renderGrid(currentTab);
+
+    updatePropertiesPanel();
 }
 
-void MainWindow::updatePropertiesPanel() {
+void MainWindow::updatePropertiesPanel()
+{
     // Очистка панели свойств
-    QLayout* oldLayout = propertiesPanel->layout();
-    if (oldLayout) {
-        QLayoutItem* item;
-        while ((item = oldLayout->takeAt(0)) != nullptr) {
-            if (item->widget()) {
+    QLayout *oldLayout = propertiesPanel->layout();
+    if (oldLayout)
+    {
+        QLayoutItem *item;
+        while ((item = oldLayout->takeAt(0)) != nullptr)
+        {
+            if (item->widget())
+            {
                 delete item->widget();
             }
             delete item;
@@ -622,60 +817,68 @@ void MainWindow::updatePropertiesPanel() {
         delete oldLayout;
     }
 
-    QVBoxLayout* propLayout = new QVBoxLayout(propertiesPanel);
+    QVBoxLayout *propLayout = new QVBoxLayout(propertiesPanel);
     propLayout->setContentsMargins(10, 10, 10, 10);
 
-    QLabel* titleLabel = new QLabel("Свойства", this);
+    QLabel *titleLabel = new QLabel("Свойства", this);
     titleLabel->setObjectName("propertiesTitle");
     propLayout->addWidget(titleLabel);
 
-    if (selectedPhoto) {
+    if (selectedPhoto)
+    {
         // Превью фото
-        QLabel* preview = new QLabel(this);
+        QLabel *preview = new QLabel(this);
         preview->setPixmap(QPixmap(selectedPhoto->getFilePath()).scaled(280, 280, Qt::KeepAspectRatio, Qt::SmoothTransformation));
         preview->setAlignment(Qt::AlignCenter);
         propLayout->addWidget(preview);
 
         // Информация о фото
-        QLabel* typeLabel = new QLabel("Тип: фото", this);
+        QLabel *typeLabel = new QLabel("Тип: фото", this);
         typeLabel->setObjectName("infoLabel");
         propLayout->addWidget(typeLabel);
 
-        QLabel* nameLabel = new QLabel("Имя файла: " + QFileInfo(selectedPhoto->getFilePath()).fileName(), this);
+        QLabel *nameLabel = new QLabel("Имя файла: " + QFileInfo(selectedPhoto->getFilePath()).fileName(), this);
         nameLabel->setObjectName("infoLabel");
         nameLabel->setWordWrap(true);
         propLayout->addWidget(nameLabel);
 
-        QLabel* dateLabel = new QLabel("Дата добавления: " + selectedPhoto->getDate().toString("dd MMMM yyyy"), this);
+        QLabel *dateLabel = new QLabel("Дата добавления: " + selectedPhoto->getDate().toString("dd MMMM yyyy"), this);
         dateLabel->setObjectName("infoLabel");
         dateLabel->setWordWrap(true);
         propLayout->addWidget(dateLabel);
 
         // Теги
         QStringList tagNames;
-        for (const Tag& tag : selectedPhoto->getTags()) {
+        for (const Tag &tag : selectedPhoto->getTags())
+        {
             tagNames << tag.getName();
         }
-        if (!tagNames.isEmpty()) {
-            QLabel* tagsLabel = new QLabel("Теги: " + tagNames.join(", "), this);
+        if (!tagNames.isEmpty())
+        {
+            QLabel *tagsLabel = new QLabel("Теги: " + tagNames.join(", "), this);
             tagsLabel->setObjectName("infoLabel");
             tagsLabel->setWordWrap(true);
             propLayout->addWidget(tagsLabel);
-        } else {
-            QLabel* tagsLabel = new QLabel("Теги: (добавьте)", this);
+        }
+        else
+        {
+            QLabel *tagsLabel = new QLabel("Теги: (добавьте)", this);
             tagsLabel->setObjectName("infoLabel");
             tagsLabel->setStyleSheet("color: #999;");
             propLayout->addWidget(tagsLabel);
         }
 
         // Комментарий
-        if (!selectedPhoto->getDescription().isEmpty()) {
-            QLabel* commentLabel = new QLabel("Комментарии: " + selectedPhoto->getDescription(), this);
+        if (!selectedPhoto->getDescription().isEmpty())
+        {
+            QLabel *commentLabel = new QLabel("Комментарии: " + selectedPhoto->getDescription(), this);
             commentLabel->setObjectName("infoLabel");
             commentLabel->setWordWrap(true);
             propLayout->addWidget(commentLabel);
-        } else {
-            QLabel* commentLabel = new QLabel("Комментарии: (добавьте)", this);
+        }
+        else
+        {
+            QLabel *commentLabel = new QLabel("Комментарии: (добавьте)", this);
             commentLabel->setObjectName("infoLabel");
             commentLabel->setStyleSheet("color: #999;");
             propLayout->addWidget(commentLabel);
@@ -684,40 +887,45 @@ void MainWindow::updatePropertiesPanel() {
         propLayout->addStretch();
 
         // Кнопки действий
-        QPushButton* editBtn = new QPushButton("Редактировать", this);
+        QPushButton *editBtn = new QPushButton("Редактировать", this);
         connect(editBtn, &QPushButton::clicked, this, &MainWindow::editPhoto);
         propLayout->addWidget(editBtn);
 
-        QPushButton* delBtn = new QPushButton("Удалить", this);
+        QPushButton *delBtn = new QPushButton("Удалить", this);
         connect(delBtn, &QPushButton::clicked, this, &MainWindow::deleteItem);
         propLayout->addWidget(delBtn);
-
-    } else if (selectedAlbum) {
+    }
+    else if (selectedAlbum)
+    {
         // Информация об альбоме
         int photoCount = manager.getAllPhotos(selectedAlbum).size();
 
         // Миниатюры альбома (превью как квадрат)
-        QWidget* previewWidget = new QWidget(this);
+        QWidget *previewWidget = new QWidget(this);
         previewWidget->setObjectName("albumPreview");
         previewWidget->setFixedSize(280, 180);
-        QGridLayout* previewLayout = new QGridLayout(previewWidget);
+        QGridLayout *previewLayout = new QGridLayout(previewWidget);
         previewLayout->setSpacing(2);
         previewLayout->setContentsMargins(0, 0, 0, 0);
 
-        QList<Photo*> albumPhotos = manager.getAllPhotos(selectedAlbum);
+        QList<Photo *> albumPhotos = manager.getAllPhotos(selectedAlbum);
         int maxPreviews = qMin(4, albumPhotos.size());
 
-        if (maxPreviews > 0) {
-            for (int i = 0; i < maxPreviews; ++i) {
-                QLabel* thumb = new QLabel(previewWidget);
+        if (maxPreviews > 0)
+        {
+            for (int i = 0; i < maxPreviews; ++i)
+            {
+                QLabel *thumb = new QLabel(previewWidget);
                 int size = (maxPreviews == 1) ? 280 : 138;
                 thumb->setPixmap(QPixmap(albumPhotos[i]->getFilePath()).scaled(size, size, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation));
                 thumb->setFixedSize(size, size);
                 thumb->setScaledContents(true);
                 previewLayout->addWidget(thumb, i / 2, i % 2);
             }
-        } else {
-            QLabel* placeholder = new QLabel("📁", previewWidget);
+        }
+        else
+        {
+            QLabel *placeholder = new QLabel("📁", previewWidget);
             placeholder->setAlignment(Qt::AlignCenter);
             placeholder->setStyleSheet("font-size: 60px; color: #ccc;");
             previewLayout->addWidget(placeholder, 0, 0, 2, 2);
@@ -725,31 +933,33 @@ void MainWindow::updatePropertiesPanel() {
 
         propLayout->addWidget(previewWidget);
 
-        QLabel* typeLabel = new QLabel("Тип: Альбом", this);
+        QLabel *typeLabel = new QLabel("Тип: Альбом", this);
         typeLabel->setObjectName("infoLabel");
         propLayout->addWidget(typeLabel);
 
-        QLabel* nameLabel = new QLabel("Название: " + selectedAlbum->getName(), this);
+        QLabel *nameLabel = new QLabel("Название: " + selectedAlbum->getName(), this);
         nameLabel->setObjectName("infoLabel");
         nameLabel->setWordWrap(true);
         propLayout->addWidget(nameLabel);
 
         // Дата создания (можно получить из первого фото, если есть)
-        if (!albumPhotos.isEmpty()) {
-            QLabel* dateLabel = new QLabel("Дата создания: " + albumPhotos.first()->getDate().toString("dd MMMM yyyy"), this);
+        if (!albumPhotos.isEmpty())
+        {
+            QLabel *dateLabel = new QLabel("Дата создания: " + albumPhotos.first()->getDate().toString("dd MMMM yyyy"), this);
             dateLabel->setObjectName("infoLabel");
             dateLabel->setWordWrap(true);
             propLayout->addWidget(dateLabel);
         }
 
-        QLabel* countLabel = new QLabel("Количество фото: " + QString::number(photoCount), this);
+        QLabel *countLabel = new QLabel("Количество фото: " + QString::number(photoCount), this);
         countLabel->setObjectName("infoLabel");
         propLayout->addWidget(countLabel);
 
         propLayout->addStretch();
-
-    } else {
-        QLabel* placeholder = new QLabel("Откройте любой элемент, чтобы\nпосмотреть сведения", this);
+    }
+    else
+    {
+        QLabel *placeholder = new QLabel("Откройте любой элемент, чтобы\nпосмотреть сведения", this);
         placeholder->setAlignment(Qt::AlignCenter);
         placeholder->setWordWrap(true);
         propLayout->addWidget(placeholder);
@@ -757,38 +967,42 @@ void MainWindow::updatePropertiesPanel() {
     }
 }
 
-void MainWindow::showEmptyState() {
+void MainWindow::showEmptyState()
+{
     int index = tabWidget->currentIndex();
-    QWidget* currentTab = tabWidget->widget(index);
-    QLayout* oldLayout = currentTab->layout();
-    if (oldLayout) {
-        QLayoutItem* item;
-        while ((item = oldLayout->takeAt(0)) != nullptr) {
-            if (item->widget()) delete item->widget();
+    QWidget *currentTab = tabWidget->widget(index);
+    QLayout *oldLayout = currentTab->layout();
+    if (oldLayout)
+    {
+        QLayoutItem *item;
+        while ((item = oldLayout->takeAt(0)) != nullptr)
+        {
+            if (item->widget())
+                delete item->widget();
             delete item;
         }
         delete oldLayout;
     }
 
-    QVBoxLayout* layout = new QVBoxLayout(currentTab);
+    QVBoxLayout *layout = new QVBoxLayout(currentTab);
 
-    QLabel* emptyLabel = new QLabel("Добро пожаловать,\n" + currentUser->getName() + "!", currentTab);
+    QLabel *emptyLabel = new QLabel("Добро пожаловать,\n" + currentUser->getName() + "!", currentTab);
     emptyLabel->setObjectName("welcomeLabel");
     emptyLabel->setAlignment(Qt::AlignCenter);
     layout->addWidget(emptyLabel);
 
     layout->addStretch();
 
-    QLabel* hintLabel = new QLabel("Импортируйте фото или создайте альбом для начала работы", currentTab);
+    QLabel *hintLabel = new QLabel("Импортируйте фото или создайте альбом для начала работы", currentTab);
     hintLabel->setAlignment(Qt::AlignCenter);
     layout->addWidget(hintLabel);
 
-    QPushButton* addBtn = new QPushButton("Добавить фото", currentTab);
+    QPushButton *addBtn = new QPushButton("Добавить фото", currentTab);
     addBtn->setObjectName("emptyAddButton");
     addBtn->setMenu(addButton->menu());
     addBtn->setFixedSize(200, 44);
 
-    QHBoxLayout* btnLayout = new QHBoxLayout();
+    QHBoxLayout *btnLayout = new QHBoxLayout();
     btnLayout->addStretch();
     btnLayout->addWidget(addBtn);
     btnLayout->addStretch();
@@ -797,38 +1011,63 @@ void MainWindow::showEmptyState() {
     layout->addStretch();
 }
 
-void MainWindow::renderFeed(QWidget* container) {
-    QVBoxLayout* containerLayout = qobject_cast<QVBoxLayout*>(container->layout());
-    if (!containerLayout) {
+void MainWindow::renderFeed(QWidget *container)
+{
+    QVBoxLayout *containerLayout = qobject_cast<QVBoxLayout *>(container->layout());
+    if (!containerLayout)
+    {
         containerLayout = new QVBoxLayout(container);
     }
 
-    QScrollArea* scrollArea = new QScrollArea(container);
+    QScrollArea *scrollArea = new QScrollArea(container);
     scrollArea->setWidgetResizable(true);
     scrollArea->setObjectName("feedScrollArea");
 
-    QWidget* content = new QWidget();
-    QVBoxLayout* layout = new QVBoxLayout(content);
+    QWidget *content = new QWidget();
+    QVBoxLayout *layout = new QVBoxLayout(content);
     layout->setSpacing(10);
 
-    Album* targetAlbum = selectedAlbum ? selectedAlbum : currentUser->getRootAlbum();
-    QList<Photo*> photos = manager.getAllPhotos(targetAlbum);
+    // Источник фотографий зависит от режима
+    QList<Photo *> photos;
+    if (inSearchMode)
+    {
+        photos = searchResults;
+    }
+    else if (currentSection == Favorites)
+    {
+        photos = favorites;
+    }
+    else if (currentSection == Recent)
+    {
+        QList<Photo *> all = manager.getAllPhotos(currentUser->getRootAlbum());
+        std::sort(all.begin(), all.end(), [](Photo *a, Photo *b)
+                  { return a->getDate() > b->getDate(); });
+        int count = qMin(20, all.size());
+        for (int i = 0; i < count; ++i)
+            photos.append(all[i]);
+    }
+    else
+    { // AllPhotos or Albums
+        Album *targetAlbum = selectedAlbum ? selectedAlbum : currentUser->getRootAlbum();
+        photos = manager.getAllPhotos(targetAlbum);
+    }
 
     // Сортируем фото по дате (от нового к старому)
-    std::sort(photos.begin(), photos.end(), [](Photo* a, Photo* b) {
-        return a->getDate() > b->getDate();
-    });
+    std::sort(photos.begin(), photos.end(), [](Photo *a, Photo *b)
+              { return a->getDate() > b->getDate(); });
 
     // Если фотографий нет — показываем сообщение
-    if (photos.isEmpty()) {
-        QLabel* emptyLabel = new QLabel("Нет фотографий", content);
+    if (photos.isEmpty())
+    {
+        QLabel *emptyLabel = new QLabel("Нет фотографий", content);
         emptyLabel->setAlignment(Qt::AlignCenter);
         layout->addWidget(emptyLabel);
     }
 
     // Группировка по дате
-    QMap<QString, QList<Photo*>> photosByDate;
-    for (Photo* photo : photos) {
+    QMap<QString, QList<Photo *>> photosByDate;
+    for (Photo *photo : photos)
+    {
         QString yearMonth = photo->getDate().toString("MMMM yyyy");
         photosByDate[yearMonth].append(photo);
     }
@@ -836,21 +1075,23 @@ void MainWindow::renderFeed(QWidget* container) {
     // Отрисовка по группам (в хронологическом порядке)
     QList<QString> keys = photosByDate.keys();
     // Сортируем ключи по дате
-    std::sort(keys.begin(), keys.end(), [](const QString& a, const QString& b) {
+    std::sort(keys.begin(), keys.end(), [](const QString &a, const QString &b)
+              {
         QDate dateA = QDate::fromString(a, "MMMM yyyy");
         QDate dateB = QDate::fromString(b, "MMMM yyyy");
-        return dateA > dateB;
-    });
+        return dateA > dateB; });
 
-    for (const QString& key : keys) {
+    for (const QString &key : keys)
+    {
         // Заголовок группы
-        QLabel* header = new QLabel(key, content);
+        QLabel *header = new QLabel(key, content);
         header->setObjectName("dateHeader");
         layout->addWidget(header);
 
         // Фотографии группы
-        for (Photo* photo : photosByDate[key]) {
-            QWidget* photoCard = createPhotoCard(photo, content);
+        for (Photo *photo : photosByDate[key])
+        {
+            QWidget *photoCard = createPhotoCard(photo, content);
             layout->addWidget(photoCard);
         }
     }
@@ -860,108 +1101,141 @@ void MainWindow::renderFeed(QWidget* container) {
     containerLayout->addWidget(scrollArea);
 }
 
-void MainWindow::renderGrid(QWidget* container) {
+void MainWindow::renderGrid(QWidget *container)
+{
 
-    QVBoxLayout* mainLayout = new QVBoxLayout(container);
+    QVBoxLayout *mainLayout = new QVBoxLayout(container);
 
-        QScrollArea* scroll = new QScrollArea(container);
-        scroll->setWidgetResizable(true);
+    QScrollArea *scroll = new QScrollArea(container);
+    scroll->setWidgetResizable(true);
 
-        QWidget* content = new QWidget();
-        QGridLayout* grid = new QGridLayout(content);
-        grid->setSpacing(10);
+    QWidget *content = new QWidget();
+    QGridLayout *grid = new QGridLayout(content);
+    grid->setSpacing(10);
 
-        Album* album = selectedAlbum ? selectedAlbum : currentUser->getRootAlbum();
-        QList<Photo*> photos = manager.getAllPhotos(album);
+    QList<Photo *> photos;
+    if (inSearchMode)
+    {
+        photos = searchResults;
+    }
+    else if (currentSection == Favorites)
+    {
+        photos = favorites;
+    }
+    else if (currentSection == Recent)
+    {
+        QList<Photo *> all = manager.getAllPhotos(currentUser->getRootAlbum());
+        std::sort(all.begin(), all.end(), [](Photo *a, Photo *b)
+                  { return a->getDate() > b->getDate(); });
+        int count = qMin(20, all.size());
+        for (int i = 0; i < count; ++i)
+            photos.append(all[i]);
+    }
+    else
+    {
+        Album *album = selectedAlbum ? selectedAlbum : currentUser->getRootAlbum();
+        photos = manager.getAllPhotos(album);
+    }
 
-        int col = 0, row = 0;
-        const int columns = 3;
+    int col = 0, row = 0;
+    const int columns = 3;
 
-        for (Photo* photo : photos) {
-            QWidget* card = new QWidget(content);
-            card->setObjectName("photoGridCard");
+    for (Photo *photo : photos)
+    {
+        QWidget *card = new QWidget(content);
+        card->setObjectName("photoGridCard");
 
-            QVBoxLayout* cardLayout = new QVBoxLayout(card);
-            cardLayout->setSpacing(4);
-            cardLayout->setContentsMargins(4, 4, 4, 4);
+        QVBoxLayout *cardLayout = new QVBoxLayout(card);
+        cardLayout->setSpacing(4);
+        cardLayout->setContentsMargins(4, 4, 4, 4);
 
-            QLabel* img = new QLabel(card);
-            img->setPixmap(QPixmap(photo->getFilePath())
-                .scaled(260, 260, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-            img->setAlignment(Qt::AlignCenter);
-            cardLayout->addWidget(img);
+        QLabel *img = new QLabel(card);
+        img->setPixmap(QPixmap(photo->getFilePath())
+                           .scaled(340, 340, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+        img->setAlignment(Qt::AlignCenter);
+        img->setFixedSize(340, 340);
+        cardLayout->addWidget(img);
 
-            QLabel* name = new QLabel(QFileInfo(photo->getFilePath()).fileName(), card);
-            name->setAlignment(Qt::AlignCenter);
-            name->setWordWrap(true);
-            cardLayout->addWidget(name);
+        QLabel *name = new QLabel(QFileInfo(photo->getFilePath()).fileName(), card);
+        name->setAlignment(Qt::AlignCenter);
+        name->setWordWrap(true);
+        cardLayout->addWidget(name);
 
-            grid->addWidget(card, row, col);
+        grid->addWidget(card, row, col);
 
-            if (++col >= columns) {
-                col = 0;
-                row++;
-            }
+        if (++col >= columns)
+        {
+            col = 0;
+            row++;
         }
+    }
 
-        scroll->setWidget(content);
-        mainLayout->addWidget(scroll);
+    scroll->setWidget(content);
+    mainLayout->addWidget(scroll);
 }
 
-void MainWindow::renderAlbums(QWidget* container) {
-    QVBoxLayout* containerLayout = qobject_cast<QVBoxLayout*>(container->layout());
-    if (!containerLayout) {
+void MainWindow::renderAlbums(QWidget *container)
+{
+    QVBoxLayout *containerLayout = qobject_cast<QVBoxLayout *>(container->layout());
+    if (!containerLayout)
+    {
         containerLayout = new QVBoxLayout(container);
     }
 
-    QScrollArea* scrollArea = new QScrollArea(container);
+    QScrollArea *scrollArea = new QScrollArea(container);
     scrollArea->setWidgetResizable(true);
     scrollArea->setObjectName("albumsScrollArea");
 
-    QWidget* content = new QWidget();
-    QVBoxLayout* layout = new QVBoxLayout(content);
+    QWidget *content = new QWidget();
+    QVBoxLayout *layout = new QVBoxLayout(content);
     layout->setSpacing(20);
 
     // Группировка альбомов по годам (если есть дата в названии)
-    QMap<QString, QList<Album*>> albumsByYear;
+    QMap<QString, QList<Album *>> albumsByYear;
 
-    QList<Album*> rootSubs = currentUser->getRootAlbum()->getSubAlbums();
-    for (Album* sub : rootSubs) {
+    QList<Album *> rootSubs = currentUser->getRootAlbum()->getSubAlbums();
+    for (Album *sub : rootSubs)
+    {
         QString year = "Альбомы";
         // Попытка извлечь год из имени альбома
         QRegExp yearRegex("(\\d{4})");
-        if (yearRegex.indexIn(sub->getName()) != -1) {
+        if (yearRegex.indexIn(sub->getName()) != -1)
+        {
             year = yearRegex.cap(1);
         }
         albumsByYear[year].append(sub);
     }
 
     // Если альбомов нет — сообщение
-    if (rootSubs.isEmpty()) {
-        QLabel* emptyLabel = new QLabel("Альбомы отсутствуют", content);
+    if (rootSubs.isEmpty())
+    {
+        QLabel *emptyLabel = new QLabel("Альбомы отсутствуют", content);
         emptyLabel->setAlignment(Qt::AlignLeft);
         emptyLabel->setObjectName("infoLabel");
         layout->addWidget(emptyLabel);
     }
 
     // Отрисовка по годам
-    for (auto it = albumsByYear.begin(); it != albumsByYear.end(); ++it) {
-        QLabel* yearLabel = new QLabel(it.key(), content);
+    for (auto it = albumsByYear.begin(); it != albumsByYear.end(); ++it)
+    {
+        QLabel *yearLabel = new QLabel(it.key(), content);
         yearLabel->setObjectName("yearHeader");
         layout->addWidget(yearLabel);
 
-        QGridLayout* albumsGrid = new QGridLayout();
+        QGridLayout *albumsGrid = new QGridLayout();
         albumsGrid->setSpacing(15);
 
         int row = 0, col = 0;
         int columns = 3;
 
-        for (Album* album : it.value()) {
-            QWidget* albumCard = createAlbumCard(album, content);
+        for (Album *album : it.value())
+        {
+            QWidget *albumCard = createAlbumCard(album, content);
             albumsGrid->addWidget(albumCard, row, col);
 
             col++;
-            if (col >= columns) {
+            if (col >= columns)
+            {
                 col = 0;
                 row++;
             }
@@ -975,55 +1249,60 @@ void MainWindow::renderAlbums(QWidget* container) {
     containerLayout->addWidget(scrollArea);
 }
 
-Album* MainWindow::getOrCreateYearAlbum(int year) {
+Album *MainWindow::getOrCreateYearAlbum(int year)
+{
     QString yearName = QString::number(year);
-    Album* root = currentUser->getRootAlbum();
+    Album *root = currentUser->getRootAlbum();
 
-    for (Album* a : root->getSubAlbums())
+    for (Album *a : root->getSubAlbums())
         if (a->getName() == yearName)
             return a;
 
-    Album* yearAlbum = new Album(yearName);
+    Album *yearAlbum = new Album(yearName);
     root->addSubAlbum(yearAlbum);
     return yearAlbum;
 }
 
-void MainWindow::rebuildAlbumsTree() {
+void MainWindow::rebuildAlbumsTree()
+{
     albumsTree->clear();
-    for (Album* year : currentUser->getRootAlbum()->getSubAlbums())
+    for (Album *year : currentUser->getRootAlbum()->getSubAlbums())
         populateTree(year);
 }
 
-
-void MainWindow::renderAlbumView(QWidget* container, Album* album) {
-    QVBoxLayout* containerLayout = qobject_cast<QVBoxLayout*>(container->layout());
-    if (!containerLayout) {
+void MainWindow::renderAlbumView(QWidget *container, Album *album)
+{
+    QVBoxLayout *containerLayout = qobject_cast<QVBoxLayout *>(container->layout());
+    if (!containerLayout)
+    {
         containerLayout = new QVBoxLayout(container);
     }
 
     // Заголовок альбома
-    QLabel* titleLabel = new QLabel("Альбомы/" + album->getName(), container);
+    QLabel *titleLabel = new QLabel("Альбомы/" + album->getName(), container);
     titleLabel->setObjectName("albumTitle");
     containerLayout->addWidget(titleLabel);
 
-    QScrollArea* scrollArea = new QScrollArea(container);
+    QScrollArea *scrollArea = new QScrollArea(container);
     scrollArea->setWidgetResizable(true);
 
-    QWidget* content = new QWidget();
-    QGridLayout* gridLayout = new QGridLayout(content);
+    QWidget *content = new QWidget();
+    QGridLayout *gridLayout = new QGridLayout(content);
     gridLayout->setSpacing(15);
 
-    QList<Photo*> photos = manager.getAllPhotos(album);
+    QList<Photo *> photos = manager.getAllPhotos(album);
 
     int row = 0, col = 0;
     int columns = 3;
 
-    for (Photo* photo : photos) {
-        QWidget* photoCard = createPhotoCard(photo, content);
+    for (Photo *photo : photos)
+    {
+        QWidget *photoCard = createPhotoCard(photo, content);
         gridLayout->addWidget(photoCard, row, col);
 
         col++;
-        if (col >= columns) {
+        if (col >= columns)
+        {
             col = 0;
             row++;
         }
@@ -1033,84 +1312,90 @@ void MainWindow::renderAlbumView(QWidget* container, Album* album) {
     containerLayout->addWidget(scrollArea);
 }
 
-QWidget* MainWindow::createPhotoCard(Photo* photo, QWidget* parent) {
-    ClickablePhotoWidget* card = new ClickablePhotoWidget(photo, parent);
-       card->setObjectName("photoCard");
+QWidget *MainWindow::createPhotoCard(Photo *photo, QWidget *parent)
+{
+    ClickablePhotoWidget *card = new ClickablePhotoWidget(photo, parent);
+    card->setObjectName("photoCard");
 
-       QHBoxLayout* layout = new QHBoxLayout(card);
-       layout->setSpacing(10);
-       layout->setContentsMargins(10, 10, 10, 10);
+    QHBoxLayout *layout = new QHBoxLayout(card);
+    layout->setSpacing(10);
+    layout->setContentsMargins(10, 10, 10, 10);
 
-       QLabel* img = new QLabel(card);
-       img->setFixedSize(160, 160);
-       img->setPixmap(QPixmap(photo->getFilePath())
-           .scaled(160, 160, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-       layout->addWidget(img);
+    QLabel *img = new QLabel(card);
+    img->setFixedSize(240, 240);
+    img->setPixmap(QPixmap(photo->getFilePath())
+                       .scaled(240, 240, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+    layout->addWidget(img);
 
-       QVBoxLayout* info = new QVBoxLayout();
+    QVBoxLayout *info = new QVBoxLayout();
 
-       QLabel* name = new QLabel(QFileInfo(photo->getFilePath()).fileName(), card);
-       name->setObjectName("photoName");
-       info->addWidget(name);
+    QLabel *name = new QLabel(QFileInfo(photo->getFilePath()).fileName(), card);
+    name->setObjectName("photoName");
+    info->addWidget(name);
 
-       QLabel* date = new QLabel(photo->getDate().toString("dd.MM.yyyy"), card);
-       info->addWidget(date);
+    QLabel *date = new QLabel(photo->getDate().toString("dd.MM.yyyy"), card);
+    info->addWidget(date);
 
-       info->addStretch();
-       layout->addLayout(info);
+    info->addStretch();
+    layout->addLayout(info);
 
-       connect(card, &ClickablePhotoWidget::clicked, this, [this, card, photo]() {
+    connect(card, &ClickablePhotoWidget::clicked, this, [this, card, photo]()
+            {
            selectedPhoto = photo;
            card->setProperty("selected", true);
-           updatePropertiesPanel();
-       });
+           updatePropertiesPanel(); });
 
-       connect(card, &ClickablePhotoWidget::doubleClicked, this, [this, photo]() {
-           showFullScreen(photo);
-       });
+    connect(card, &ClickablePhotoWidget::doubleClicked, this, [this, photo]()
+            { showFullScreen(photo); });
 
-       connect(card, &ClickablePhotoWidget::rightClicked, this,
-           [this, photo](Photo*, const QPoint& pos) {
-               selectedPhoto = photo;
-               handleRightClick(pos);
-           });
+    connect(card, &ClickablePhotoWidget::rightClicked, this,
+            [this, photo](Photo *, const QPoint &pos)
+            {
+                selectedPhoto = photo;
+                handleRightClick(pos);
+            });
 
-       return card;
+    return card;
 }
 
-QWidget* MainWindow::createAlbumCard(Album* album, QWidget* parent) {
-    ClickableAlbumWidget* card = new ClickableAlbumWidget(album, parent);
+QWidget *MainWindow::createAlbumCard(Album *album, QWidget *parent)
+{
+    ClickableAlbumWidget *card = new ClickableAlbumWidget(album, parent);
     card->setObjectName("albumCard");
     card->setMinimumSize(250, 200);
     card->setCursor(Qt::PointingHandCursor);
 
-    QVBoxLayout* cardLayout = new QVBoxLayout(card);
+    QVBoxLayout *cardLayout = new QVBoxLayout(card);
     cardLayout->setContentsMargins(10, 10, 10, 10);
     cardLayout->setSpacing(10);
 
     // Превью (сетка из фотографий)
-    QWidget* previewWidget = new QWidget(card);
+    QWidget *previewWidget = new QWidget(card);
     previewWidget->setFixedSize(230, 150);
     previewWidget->setObjectName("albumPreview");
-    QGridLayout* previewLayout = new QGridLayout(previewWidget);
+    QGridLayout *previewLayout = new QGridLayout(previewWidget);
     previewLayout->setSpacing(2);
     previewLayout->setContentsMargins(0, 0, 0, 0);
 
-    QList<Photo*> photos = manager.getAllPhotos(album);
+    QList<Photo *> photos = manager.getAllPhotos(album);
     int maxPreviews = qMin(4, photos.size());
 
-    if (maxPreviews > 0) {
-        for (int i = 0; i < maxPreviews; ++i) {
-            QLabel* thumb = new QLabel(previewWidget);
+    if (maxPreviews > 0)
+    {
+        for (int i = 0; i < maxPreviews; ++i)
+        {
+            QLabel *thumb = new QLabel(previewWidget);
             int size = (maxPreviews == 1) ? 230 : 114;
             thumb->setPixmap(QPixmap(photos[i]->getFilePath()).scaled(size, size, Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation));
             thumb->setFixedSize(size, size);
             thumb->setScaledContents(true);
             previewLayout->addWidget(thumb, i / 2, i % 2);
         }
-    } else {
+    }
+    else
+    {
         // Если нет фото, показываем placeholder
-        QLabel* placeholder = new QLabel("📁", previewWidget);
+        QLabel *placeholder = new QLabel("📁", previewWidget);
         placeholder->setAlignment(Qt::AlignCenter);
         placeholder->setStyleSheet("font-size: 48px; color: #ccc;");
         previewLayout->addWidget(placeholder, 0, 0, 2, 2);
@@ -1119,188 +1404,122 @@ QWidget* MainWindow::createAlbumCard(Album* album, QWidget* parent) {
     cardLayout->addWidget(previewWidget);
 
     // Название и количество фото
-    QLabel* nameLabel = new QLabel(album->getName() + " · " + QString::number(photos.size()) + " фото", card);
+    QLabel *nameLabel = new QLabel(album->getName() + " · " + QString::number(photos.size()) + " фото", card);
     nameLabel->setObjectName("albumName");
     nameLabel->setAlignment(Qt::AlignCenter);
     cardLayout->addWidget(nameLabel);
 
-    // Обработка клика
-    connect(card, &ClickableAlbumWidget::clicked, this, [this, album]() {
+    // Обработка кликов: один клик — выделение, двойной клик — вход в альбом, ПКМ — контекстное меню
+    connect(card, &ClickableAlbumWidget::clicked, this, [this, album]()
+            {
         selectedAlbum = album;
+        selectedPhoto = nullptr;
         currentSection = Albums;
+        updatePropertiesPanel(); });
+
+    connect(card, &ClickableAlbumWidget::doubleClicked, this, [this, album]()
+            {
+        selectedAlbum = album;
+        selectedPhoto = nullptr;
+        currentSection = Albums;
+        tabWidget->tabBar()->show();
         updateCenterPanel();
-        updatePropertiesPanel();
-    });
+        updatePropertiesPanel(); });
+
+    connect(card, &ClickableAlbumWidget::rightClicked, this, [this, album](Album *, const QPoint &pos)
+            {
+        // Контекстное меню для карточки альбома
+        QMenu menu(this);
+        QAction* renameAct = menu.addAction("Переименовать");
+        QAction* delAct = menu.addAction("Удалить");
+        QAction* act = menu.exec(pos);
+        if (act == renameAct) {
+            bool ok;
+            QString name = QInputDialog::getText(this, "Переименовать альбом", "Новое имя:", QLineEdit::Normal, album->getName(), &ok);
+            if (ok && !name.trimmed().isEmpty()) {
+                album->setName(name);
+                rebuildAlbumsTree();
+                updateCenterPanel();
+            }
+        } else if (act == delAct) {
+            QMessageBox::StandardButton reply = QMessageBox::question(this, "Удаление", "Удалить альбом " + album->getName() + "?", QMessageBox::Yes | QMessageBox::No);
+            if (reply == QMessageBox::Yes) {
+                if (removeAlbumFromParent(album)) {
+                    delete album;
+                    selectedAlbum = nullptr;
+                    rebuildAlbumsTree();
+                    updateCenterPanel();
+                }
+            }
+        } });
 
     return card;
 }
 
-void MainWindow::populateAllPhotos() {
+void MainWindow::populateAllPhotos()
+{
     currentSection = AllPhotos;
     selectedAlbum = nullptr;
     updateCenterPanel();
 }
 
-void MainWindow::populateFavorites() {
+void MainWindow::populateFavorites()
+{
     currentSection = Favorites;
     selectedAlbum = nullptr;
-
-    // Очистка текущей вкладки
-    int index = tabWidget->currentIndex();
-    QWidget* currentTab = tabWidget->widget(index);
-    QLayout* oldLayout = currentTab->layout();
-    if (oldLayout) {
-        QLayoutItem* item;
-        while ((item = oldLayout->takeAt(0)) != nullptr) {
-            if (item->widget()) delete item->widget();
-            delete item;
-        }
-        delete oldLayout;
-    }
-
-    QVBoxLayout* layout = new QVBoxLayout(currentTab);
-
-    QLabel* titleLabel = new QLabel("Избранное", currentTab);
-    titleLabel->setObjectName("sectionTitle");
-    layout->addWidget(titleLabel);
-
-    if (favorites.isEmpty()) {
-        QLabel* emptyLabel = new QLabel("В избранном пока нет фотографий", currentTab);
-        emptyLabel->setAlignment(Qt::AlignCenter);
-        layout->addWidget(emptyLabel);
-        layout->addStretch();
-    } else {
-        QScrollArea* scrollArea = new QScrollArea(currentTab);
-        scrollArea->setWidgetResizable(true);
-        QWidget* content = new QWidget();
-        QVBoxLayout* contentLayout = new QVBoxLayout(content);
-
-        for (Photo* photo : favorites) {
-            QWidget* photoCard = createPhotoCard(photo, content);
-            contentLayout->addWidget(photoCard);
-        }
-
-        contentLayout->addStretch();
-        scrollArea->setWidget(content);
-        layout->addWidget(scrollArea);
-    }
+    inSearchMode = false;
+    updateCenterPanel();
 }
 
-void MainWindow::populateRecent() {
+void MainWindow::populateRecent()
+{
     currentSection = Recent;
     selectedAlbum = nullptr;
-
-    // Очистка текущей вкладки
-    int index = tabWidget->currentIndex();
-    QWidget* currentTab = tabWidget->widget(index);
-    QLayout* oldLayout = currentTab->layout();
-    if (oldLayout) {
-        QLayoutItem* item;
-        while ((item = oldLayout->takeAt(0)) != nullptr) {
-            if (item->widget()) delete item->widget();
-            delete item;
-        }
-        delete oldLayout;
-    }
-
-    QVBoxLayout* layout = new QVBoxLayout(currentTab);
-
-    // Приветственное сообщение
-    QLabel* welcomeLabel = new QLabel("Добро пожаловать,\n" + currentUser->getName() + "!", currentTab);
-    welcomeLabel->setObjectName("welcomeLabel");
-    welcomeLabel->setAlignment(Qt::AlignCenter);
-    layout->addWidget(welcomeLabel);
-
-    QLabel* titleLabel = new QLabel("Недавно добавленное", currentTab);
-    titleLabel->setObjectName("sectionTitle");
-    layout->addWidget(titleLabel);
-
-    QScrollArea* scrollArea = new QScrollArea(currentTab);
-    scrollArea->setWidgetResizable(true);
-
-    QWidget* content = new QWidget();
-    QVBoxLayout* contentLayout = new QVBoxLayout(content);
-
-    // Получаем последние 20 фотографий
-    QList<Photo*> allPhotos = manager.getAllPhotos(currentUser->getRootAlbum());
-    QList<Photo*> recentPhotos;
-
-    // Сортируем по дате
-    std::sort(allPhotos.begin(), allPhotos.end(), [](Photo* a, Photo* b) {
-        return a->getDate() > b->getDate();
-    });
-
-    int count = qMin(20, allPhotos.size());
-    for (int i = 0; i < count; ++i) {
-        recentPhotos.append(allPhotos[i]);
-    }
-
-    if (allPhotos.isEmpty()) {
-        QLabel* emptyLabel = new QLabel("Недавно добавленных фотографий нет", content);
-        emptyLabel->setAlignment(Qt::AlignLeft);
-        emptyLabel->setObjectName("infoLabel");
-        contentLayout->addWidget(emptyLabel);
-    }
-
-    // Группируем по дате
-    QMap<QString, QList<Photo*>> photosByYear;
-    for (Photo* photo : recentPhotos) {
-        QString year = photo->getDate().toString("yyyy");
-        photosByYear[year].append(photo);
-    }
-
-    for (auto it = photosByYear.begin(); it != photosByYear.end(); ++it) {
-        QLabel* yearLabel = new QLabel(it.key(), content);
-        yearLabel->setObjectName("yearHeader");
-        contentLayout->addWidget(yearLabel);
-
-        for (Photo* photo : it.value()) {
-            QWidget* photoCard = createPhotoCard(photo, content);
-            contentLayout->addWidget(photoCard);
-        }
-    }
-
-    contentLayout->addStretch();
-    scrollArea->setWidget(content);
-    layout->addWidget(scrollArea);
+    inSearchMode = false;
+    updateCenterPanel();
 }
 
-void MainWindow::populateTags() {
+void MainWindow::populateTags()
+{
     currentSection = Tags;
     selectedAlbum = nullptr;
     updateCenterPanel();
 }
 
-void MainWindow::showSearchParams() {
-    QDialog* dialog = new QDialog(this);
+void MainWindow::showSearchParams()
+{
+    QDialog *dialog = new QDialog(this);
     dialog->setWindowTitle("Параметры поиска");
     dialog->setMinimumSize(500, 400);
 
-    QVBoxLayout* layout = new QVBoxLayout(dialog);
+    QVBoxLayout *layout = new QVBoxLayout(dialog);
 
     // Дата
-    QLabel* dateLabel = new QLabel("Дата:", dialog);
+    QLabel *dateLabel = new QLabel("Дата:", dialog);
     layout->addWidget(dateLabel);
 
-    QCalendarWidget* calendar = new QCalendarWidget(dialog);
+    QCalendarWidget *calendar = new QCalendarWidget(dialog);
     layout->addWidget(calendar);
 
     // Теги
-    QLabel* tagLabel = new QLabel("Тег:", dialog);
+    QLabel *tagLabel = new QLabel("Тег:", dialog);
     layout->addWidget(tagLabel);
 
-    QComboBox* tagCombo = new QComboBox(dialog);
+    QComboBox *tagCombo = new QComboBox(dialog);
 
     // Собираем все теги
     QSet<QString> uniqueTags;
-    QList<Photo*> allPhotos = manager.getAllPhotos(currentUser->getRootAlbum());
-    for (Photo* photo : allPhotos) {
-        for (const Tag& tag : photo->getTags()) {
+    QList<Photo *> allPhotos = manager.getAllPhotos(currentUser->getRootAlbum());
+    for (Photo *photo : allPhotos)
+    {
+        for (const Tag &tag : photo->getTags())
+        {
             uniqueTags.insert(tag.getName());
         }
     }
 
-    for (const QString& tagName : uniqueTags) {
+    for (const QString &tagName : uniqueTags)
+    {
         tagCombo->addItem(tagName);
     }
 
@@ -1309,17 +1528,17 @@ void MainWindow::showSearchParams() {
     layout->addStretch();
 
     // Кнопки
-    QHBoxLayout* btnLayout = new QHBoxLayout();
+    QHBoxLayout *btnLayout = new QHBoxLayout();
     btnLayout->addStretch();
-    QPushButton* searchBtn = new QPushButton("Поиск", dialog);
-    connect(searchBtn, &QPushButton::clicked, [this, dialog, calendar, tagCombo]() {
+    QPushButton *searchBtn = new QPushButton("Поиск", dialog);
+    connect(searchBtn, &QPushButton::clicked, [this, dialog, calendar, tagCombo]()
+            {
         searchBar->setText(calendar->selectedDate().toString("yyyy-MM-dd") + " " + tagCombo->currentText());
         dialog->accept();
-        search();
-    });
+        search(); });
     btnLayout->addWidget(searchBtn);
 
-    QPushButton* cancelBtn = new QPushButton("Отмена", dialog);
+    QPushButton *cancelBtn = new QPushButton("Отмена", dialog);
     connect(cancelBtn, &QPushButton::clicked, dialog, &QDialog::reject);
     btnLayout->addWidget(cancelBtn);
 
@@ -1328,24 +1547,30 @@ void MainWindow::showSearchParams() {
     dialog->exec();
 }
 
-void MainWindow::addToFavorites(Photo* photo) {
-    if (!favorites.contains(photo)) {
+void MainWindow::addToFavorites(Photo *photo)
+{
+    if (!favorites.contains(photo))
+    {
         favorites.append(photo);
         QMessageBox::information(this, "Избранное", "Фото добавлено в избранное");
     }
 }
 
-void MainWindow::exportTo() {
-    if (!selectedPhoto) return;
+void MainWindow::exportTo()
+{
+    if (!selectedPhoto)
+        return;
 
     QString destPath = QFileDialog::getSaveFileName(this, "Экспортировать в...", "", "Images (*.png *.jpg)");
-    if (!destPath.isEmpty()) {
+    if (!destPath.isEmpty())
+    {
         QFile::copy(selectedPhoto->getFilePath(), destPath);
         QMessageBox::information(this, "Экспорт", "Фото успешно экспортировано");
     }
 }
 
-void MainWindow::handleRightClick(const QPoint& pos) {
+void MainWindow::handleRightClick(const QPoint &pos)
+{
     QMenu contextMenu(this);
     contextMenu.setStyleSheet(R"(
         QMenu {
@@ -1368,7 +1593,8 @@ void MainWindow::handleRightClick(const QPoint& pos) {
         }
     )");
 
-    if (selectedPhoto) {
+    if (selectedPhoto)
+    {
         contextMenu.addAction("Экспортировать в...", this, &MainWindow::exportTo);
         contextMenu.addSeparator();
         contextMenu.addAction("Редактировать", this, &MainWindow::editPhoto);
@@ -1378,82 +1604,100 @@ void MainWindow::handleRightClick(const QPoint& pos) {
     contextMenu.exec(pos);
 }
 
-void MainWindow::dropEvent(QDropEvent* event) {
-    if (event->mimeData()->hasUrls()) {
+void MainWindow::dropEvent(QDropEvent *event)
+{
+    if (event->mimeData()->hasUrls())
+    {
         QList<QString> addedFiles;
         int successCount = 0;
         int failCount = 0;
 
-        for (const QUrl& url : event->mimeData()->urls()) {
+        for (const QUrl &url : event->mimeData()->urls())
+        {
             QString filePath = url.toLocalFile();
             QString suffix = QFileInfo(filePath).suffix().toLower();
 
             // Проверяем поддерживаемые форматы
             if (suffix == "jpg" || suffix == "jpeg" || suffix == "png" ||
-                suffix == "bmp" || suffix == "gif" || suffix == "webp") {
+                suffix == "bmp" || suffix == "gif" || suffix == "webp")
+            {
 
                 // Определяем целевой альбом
-                Album* targetAlbum = selectedAlbum ? selectedAlbum : currentUser->getRootAlbum();
+                Album *targetAlbum = selectedAlbum ? selectedAlbum : currentUser->getRootAlbum();
 
                 // Создаём новое фото
-                Photo* newPhoto = new Photo(filePath, "", QDateTime::currentDateTime());
+                Photo *newPhoto = new Photo(filePath, "", QDateTime::currentDateTime());
                 targetAlbum->addPhoto(newPhoto);
 
                 addedFiles << QFileInfo(filePath).fileName();
                 successCount++;
-            } else {
+            }
+            else
+            {
                 failCount++;
             }
         }
 
         // Обновляем интерфейс
-        if (successCount > 0) {
+        if (successCount > 0)
+        {
             updateCenterPanel();
             updatePropertiesPanel();
 
             // Обновляем счётчик фото в шапке
             int photoCount = manager.getAllPhotos(currentUser->getRootAlbum()).size();
             userLabel->setText(currentUser->getName() + "\nЛокальное хранилище: " +
-                              QString::number(photoCount) + " фото");
+                               QString::number(photoCount) + " фото");
 
             // Показываем уведомление
             QString message;
-            if (successCount == 1) {
+            if (successCount == 1)
+            {
                 message = "Добавлено 1 фото: " + addedFiles.first();
-            } else {
+            }
+            else
+            {
                 message = "Добавлено " + QString::number(successCount) + " фото";
             }
 
-            if (failCount > 0) {
+            if (failCount > 0)
+            {
                 message += "\nНе удалось добавить: " + QString::number(failCount) + " файлов";
             }
 
             QMessageBox::information(this, "Импорт фото", message);
-        } else if (failCount > 0) {
+        }
+        else if (failCount > 0)
+        {
             QMessageBox::warning(this, "Импорт фото",
-                "Не удалось добавить файлы.\nПоддерживаемые форматы: JPG, PNG, BMP, GIF, WEBP");
+                                 "Не удалось добавить файлы.\nПоддерживаемые форматы: JPG, PNG, BMP, GIF, WEBP");
         }
 
         event->acceptProposedAction();
     }
 }
 
-void MainWindow::dragEnterEvent(QDragEnterEvent* event) {
+void MainWindow::dragEnterEvent(QDragEnterEvent *event)
+{
     // Проверяем, есть ли в перетаскиваемых данных файлы
-    if (event->mimeData()->hasUrls()) {
+    if (event->mimeData()->hasUrls())
+    {
         bool hasImages = false;
 
         // Проверяем, есть ли хотя бы один файл изображения
-        for (const QUrl& url : event->mimeData()->urls()) {
+        for (const QUrl &url : event->mimeData()->urls())
+        {
             QString suffix = QFileInfo(url.toLocalFile()).suffix().toLower();
             if (suffix == "jpg" || suffix == "jpeg" || suffix == "png" ||
-                suffix == "bmp" || suffix == "gif" || suffix == "webp") {
+                suffix == "bmp" || suffix == "gif" || suffix == "webp")
+            {
                 hasImages = true;
                 break;
             }
         }
 
-        if (hasImages) {
+        if (hasImages)
+        {
             event->acceptProposedAction();
 
             // Визуальная подсказка - можно добавить стиль
@@ -1462,14 +1706,17 @@ void MainWindow::dragEnterEvent(QDragEnterEvent* event) {
     }
 }
 
-void MainWindow::dragLeaveEvent(QDragLeaveEvent* event) {
+void MainWindow::dragLeaveEvent(QDragLeaveEvent *event)
+{
     (void)event;
     // Убираем визуальную подсказку
     applyStyleSheet();
 }
 
-void MainWindow::keyPressEvent(QKeyEvent* event) {
-    if (event->key() == Qt::Key_Escape) {
+void MainWindow::keyPressEvent(QKeyEvent *event)
+{
+    if (event->key() == Qt::Key_Escape)
+    {
         selectedPhoto = nullptr;
         updatePropertiesPanel();
         event->accept();
@@ -1478,7 +1725,29 @@ void MainWindow::keyPressEvent(QKeyEvent* event) {
     QMainWindow::keyPressEvent(event);
 }
 
-void MainWindow::applyStyleSheet() {
+bool MainWindow::removeAlbumFromParent(Album *target)
+{
+    // Рекурсивно ищем родителя от корня
+    QList<Album *> stack;
+    stack.append(currentUser->getRootAlbum());
+    while (!stack.isEmpty())
+    {
+        Album *a = stack.takeLast();
+        for (Album *child : a->getSubAlbums())
+        {
+            if (child == target)
+            {
+                a->removeSubAlbum(child);
+                return true;
+            }
+            stack.append(child);
+        }
+    }
+    return false;
+}
+
+void MainWindow::applyStyleSheet()
+{
     QString styleSheet = R"(
         QMainWindow {
             background-color: #f5f5f5;

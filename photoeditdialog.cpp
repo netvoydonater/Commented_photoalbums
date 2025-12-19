@@ -1,4 +1,5 @@
 #include "photoeditdialog.h"
+#include "album.h"
 #include <QVBoxLayout>
 #include <QHBoxLayout>
 #include <QPushButton>
@@ -12,8 +13,12 @@
 #include <QMenu>
 #include <QRubberBand>
 #include <QMouseEvent>
+#include <QComboBox>
+#include <QVariant>
 
-PhotoEditDialog::PhotoEditDialog(Photo* photo, QWidget* parent) : QDialog(parent), photo(photo) {
+PhotoEditDialog::PhotoEditDialog(Photo *photo, Album *rootAlbum, QWidget *parent)
+    : QDialog(parent), photo(photo), rootAlbum(rootAlbum)
+{
     setWindowTitle("Редактирование");
     resize(1000, 700);
     setupUI();
@@ -22,23 +27,24 @@ PhotoEditDialog::PhotoEditDialog(Photo* photo, QWidget* parent) : QDialog(parent
 
 PhotoEditDialog::~PhotoEditDialog() {}
 
-void PhotoEditDialog::setupUI() {
-    QHBoxLayout* mainLayout = new QHBoxLayout(this);
+void PhotoEditDialog::setupUI()
+{
+    QHBoxLayout *mainLayout = new QHBoxLayout(this);
     mainLayout->setSpacing(0);
     mainLayout->setContentsMargins(0, 0, 0, 0);
 
     // === ЛЕВАЯ ЧАСТЬ - Большое превью фото ===
-    QWidget* leftWidget = new QWidget(this);
+    QWidget *leftWidget = new QWidget(this);
     leftWidget->setObjectName("leftPanel");
-    QVBoxLayout* leftLayout = new QVBoxLayout(leftWidget);
+    QVBoxLayout *leftLayout = new QVBoxLayout(leftWidget);
     leftLayout->setContentsMargins(0, 0, 0, 0);
 
     // Верхняя панель с заголовком и кнопкой закрытия
-    QWidget* topBar = new QWidget(leftWidget);
+    QWidget *topBar = new QWidget(leftWidget);
     topBar->setObjectName("topBar");
-    QHBoxLayout* topBarLayout = new QHBoxLayout(topBar);
+    QHBoxLayout *topBarLayout = new QHBoxLayout(topBar);
 
-    QLabel* titleLabel = new QLabel("Редактирование", topBar);
+    QLabel *titleLabel = new QLabel("Редактирование", topBar);
     titleLabel->setObjectName("dialogTitle");
     topBarLayout->addWidget(titleLabel);
     topBarLayout->addStretch();
@@ -62,10 +68,10 @@ void PhotoEditDialog::setupUI() {
     leftLayout->addWidget(previewLabel, 1);
 
     // Нижняя панель с дополнительными действиями
-    QWidget* bottomBar = new QWidget(leftWidget);
-    QHBoxLayout* bottomBarLayout = new QHBoxLayout(bottomBar);
+    QWidget *bottomBar = new QWidget(leftWidget);
+    QHBoxLayout *bottomBarLayout = new QHBoxLayout(bottomBar);
 
-    QLabel* filenameLabel = new QLabel(QFileInfo(photo->getFilePath()).fileName(), bottomBar);
+    QLabel *filenameLabel = new QLabel(QFileInfo(photo->getFilePath()).fileName(), bottomBar);
     filenameLabel->setObjectName("filenameLabel");
     bottomBarLayout->addWidget(filenameLabel);
     bottomBarLayout->addStretch();
@@ -75,23 +81,23 @@ void PhotoEditDialog::setupUI() {
     mainLayout->addWidget(leftWidget, 2);
 
     // === ПРАВАЯ ЧАСТЬ - Информация и редактирование ===
-    QWidget* rightWidget = new QWidget(this);
+    QWidget *rightWidget = new QWidget(this);
     rightWidget->setObjectName("rightPanel");
     rightWidget->setMinimumWidth(350);
     rightWidget->setMaximumWidth(350);
-    QVBoxLayout* rightLayout = new QVBoxLayout(rightWidget);
+    QVBoxLayout *rightLayout = new QVBoxLayout(rightWidget);
     rightLayout->setContentsMargins(20, 20, 20, 20);
     rightLayout->setSpacing(15);
 
     // Меню действий
-    QHBoxLayout* actionsLayout = new QHBoxLayout();
+    QHBoxLayout *actionsLayout = new QHBoxLayout();
 
-    QPushButton* favBtn = new QPushButton("В избранное", rightWidget);
+    QPushButton *favBtn = new QPushButton("В избранное", rightWidget);
     favBtn->setObjectName("actionButton");
     connect(favBtn, &QPushButton::clicked, this, &PhotoEditDialog::addToFavorites);
     actionsLayout->addWidget(favBtn);
 
-    QPushButton* cropBtn = new QPushButton("Обрезать", rightWidget);
+    QPushButton *cropBtn = new QPushButton("Обрезать", rightWidget);
     cropBtn->setObjectName("actionButton");
     connect(cropBtn, &QPushButton::clicked, this, &PhotoEditDialog::applyCrop);
     actionsLayout->addWidget(cropBtn);
@@ -99,28 +105,73 @@ void PhotoEditDialog::setupUI() {
     rightLayout->addLayout(actionsLayout);
 
     // Миниатюра
-    QLabel* thumbnail = new QLabel(rightWidget);
+    QLabel *thumbnail = new QLabel(rightWidget);
     thumbnail->setPixmap(scaled.scaled(280, 280, Qt::KeepAspectRatio, Qt::SmoothTransformation));
     thumbnail->setAlignment(Qt::AlignCenter);
     rightLayout->addWidget(thumbnail);
 
     // Информация о фото
-    QLabel* typeLabel = new QLabel("Тип: фото", rightWidget);
+    QLabel *typeLabel = new QLabel("Тип: фото", rightWidget);
     typeLabel->setObjectName("infoLabel");
     rightLayout->addWidget(typeLabel);
 
-    QLabel* nameLabel = new QLabel("Имя файла: " + QFileInfo(photo->getFilePath()).fileName(), rightWidget);
+    QLabel *nameLabel = new QLabel("Имя файла: " + QFileInfo(photo->getFilePath()).fileName(), rightWidget);
     nameLabel->setObjectName("infoLabel");
     nameLabel->setWordWrap(true);
     rightLayout->addWidget(nameLabel);
 
-    QLabel* dateLabel = new QLabel("Дата добавления: " + photo->getDate().toString("dd MMMM yyyy"), rightWidget);
+    QLabel *dateLabel = new QLabel("Дата добавления: " + photo->getDate().toString("dd MMMM yyyy"), rightWidget);
     dateLabel->setObjectName("infoLabel");
     dateLabel->setWordWrap(true);
     rightLayout->addWidget(dateLabel);
 
+    // Перемещение фото — выбор альбома
+    QLabel *moveLabel = new QLabel("Переместить в:", rightWidget);
+    moveLabel->setObjectName("fieldLabel");
+    rightLayout->addWidget(moveLabel);
+
+    moveCombo = new QComboBox(rightWidget);
+    moveCombo->setObjectName("inputField");
+    moveCombo->addItem("Локальное хранилище", QVariant::fromValue(rootAlbum));
+
+    // Добавим все альбомы рекурсивно
+    QList<Album *> allAlbums;
+    collectAlbums(rootAlbum, allAlbums);
+    for (Album *a : allAlbums)
+        moveCombo->addItem(a->getName(), QVariant::fromValue(a));
+
+    // Попытаемся выделить текущий альбом, если фото уже в каком-то
+    Album *currentAlbum = nullptr;
+    QList<Album *> stack;
+    stack.append(rootAlbum);
+    while (!stack.isEmpty())
+    {
+        Album *a = stack.takeLast();
+        if (a->getPhotos().contains(photo))
+        {
+            currentAlbum = a;
+            break;
+        }
+        for (Album *s : a->getSubAlbums())
+            stack.append(s);
+    }
+    if (currentAlbum)
+    {
+        for (int i = 0; i < moveCombo->count(); ++i)
+        {
+            Album *a = qvariant_cast<Album *>(moveCombo->itemData(i));
+            if (a == currentAlbum)
+            {
+                moveCombo->setCurrentIndex(i);
+                break;
+            }
+        }
+    }
+
+    rightLayout->addWidget(moveCombo);
+
     // Теги
-    QLabel* tagsLabel = new QLabel("Теги: (добавьте)", rightWidget);
+    QLabel *tagsLabel = new QLabel("Теги: (добавьте)", rightWidget);
     tagsLabel->setObjectName("fieldLabel");
     rightLayout->addWidget(tagsLabel);
 
@@ -129,17 +180,18 @@ void PhotoEditDialog::setupUI() {
     tagEdit->setPlaceholderText("Введите теги через запятую...");
 
     QStringList existingTags;
-    for (const Tag& tag : photo->getTags()) {
+    for (const Tag &tag : photo->getTags())
+    {
         existingTags << tag.getName();
     }
-    if (!existingTags.isEmpty()) {
+    if (!existingTags.isEmpty())
+    {
         tagEdit->setText(existingTags.join(", "));
     }
 
     rightLayout->addWidget(tagEdit);
-
     // Комментарии
-    QLabel* commentLabel = new QLabel("Комментарии:", rightWidget);
+    QLabel *commentLabel = new QLabel("Комментарии:", rightWidget);
     commentLabel->setObjectName("fieldLabel");
     rightLayout->addWidget(commentLabel);
 
@@ -153,7 +205,7 @@ void PhotoEditDialog::setupUI() {
     rightLayout->addStretch();
 
     // Кнопка сохранения
-    QPushButton* saveBtn = new QPushButton("Сохранить изменения", rightWidget);
+    QPushButton *saveBtn = new QPushButton("Сохранить изменения", rightWidget);
     saveBtn->setObjectName("saveButton");
     connect(saveBtn, &QPushButton::clicked, this, &PhotoEditDialog::saveChanges);
     rightLayout->addWidget(saveBtn);
@@ -161,16 +213,18 @@ void PhotoEditDialog::setupUI() {
     mainLayout->addWidget(rightWidget);
 }
 
-void PhotoEditDialog::saveChanges() {
+void PhotoEditDialog::saveChanges()
+{
     // Сохранение тегов
     QString tagsText = tagEdit->text();
-    if (!tagsText.isEmpty()) {
+    if (!tagsText.isEmpty())
+    {
         QStringList tags = tagsText.split(",", QString::SkipEmptyParts);
-        // Очищаем существующие теги (опционально)
-        // photo->clearTags(); // Если есть такой метод
-        for (const QString& tagName : tags) {
+        for (const QString &tagName : tags)
+        {
             QString trimmedTag = tagName.trimmed();
-            if (!trimmedTag.isEmpty()) {
+            if (!trimmedTag.isEmpty())
+            {
                 photo->addTag(Tag(trimmedTag));
             }
         }
@@ -179,30 +233,73 @@ void PhotoEditDialog::saveChanges() {
     // Сохранение комментария
     photo->setDescription(commentEdit->toPlainText());
 
+    // Перемещение фото
+    if (moveCombo)
+    {
+        Album *target = qvariant_cast<Album *>(moveCombo->currentData());
+        if (target)
+        {
+            Album *currentAlbum = nullptr;
+            QList<Album *> stack;
+            stack.append(rootAlbum);
+            while (!stack.isEmpty())
+            {
+                Album *a = stack.takeLast();
+                if (a->getPhotos().contains(photo))
+                {
+                    currentAlbum = a;
+                    break;
+                }
+                for (Album *s : a->getSubAlbums())
+                    stack.append(s);
+            }
+            if (currentAlbum != target)
+            {
+                if (currentAlbum)
+                    currentAlbum->removePhoto(photo);
+                target->addPhoto(photo);
+            }
+        }
+    }
+
     QMessageBox::information(this, "Сохранение", "Изменения успешно сохранены");
     accept();
 }
 
-void PhotoEditDialog::addToFavorites() {
+void PhotoEditDialog::collectAlbums(Album *album, QList<Album *> &list)
+{
+    for (Album *s : album->getSubAlbums())
+    {
+        list.append(s);
+        collectAlbums(s, list);
+    }
+}
+
+void PhotoEditDialog::addToFavorites()
+{
     emit addToFavoritesRequested(photo);
     QMessageBox::information(this, "Избранное", "Фото добавлено в избранное");
 }
 
-void PhotoEditDialog::applyCrop() {
-    if (selectionRect.isNull() || selectionRect.width() < 5 || selectionRect.height() < 5) {
+void PhotoEditDialog::applyCrop()
+{
+    if (selectionRect.isNull() || selectionRect.width() < 5 || selectionRect.height() < 5)
+    {
         QMessageBox::information(this, "Обрезка", "Выделите область для обрезки мышью по фото.");
         return;
     }
 
     QImage image(photo->getFilePath());
-    if (image.isNull()) {
+    if (image.isNull())
+    {
         QMessageBox::warning(this, "Обрезка", "Не удалось загрузить изображение для обрезки");
         return;
     }
 
     // Соотношение масштабирования между оригиналом и превью
-    const QPixmap* scaledPtr = previewLabel->pixmap();
-    if (!scaledPtr || scaledPtr->isNull()) {
+    const QPixmap *scaledPtr = previewLabel->pixmap();
+    if (!scaledPtr || scaledPtr->isNull())
+    {
         QMessageBox::warning(this, "Обрезка", "Не удалось получить превью изображения");
         return;
     }
@@ -215,11 +312,11 @@ void PhotoEditDialog::applyCrop() {
         static_cast<int>(selectionRect.x() * scaleX),
         static_cast<int>(selectionRect.y() * scaleY),
         static_cast<int>(selectionRect.width() * scaleX),
-        static_cast<int>(selectionRect.height() * scaleY)
-    );
+        static_cast<int>(selectionRect.height() * scaleY));
     mappedRect = mappedRect.intersected(image.rect());
 
-    if (mappedRect.isEmpty()) {
+    if (mappedRect.isEmpty())
+    {
         QMessageBox::warning(this, "Обрезка", "Некорректная область обрезки");
         return;
     }
@@ -229,10 +326,11 @@ void PhotoEditDialog::applyCrop() {
     // Обновляем оригинальный и масштабированный pixmap
     originalPixmap = QPixmap(photo->getFilePath());
     QPixmap newScaled = originalPixmap.scaled(previewLabel->width(), previewLabel->height(),
-                                             Qt::KeepAspectRatio, Qt::SmoothTransformation);
+                                              Qt::KeepAspectRatio, Qt::SmoothTransformation);
     previewLabel->setPixmap(newScaled);
 
-    if (rubberBand) {
+    if (rubberBand)
+    {
         rubberBand->hide();
         selectionRect = QRect();
     }
@@ -240,7 +338,8 @@ void PhotoEditDialog::applyCrop() {
     QMessageBox::information(this, "Обрезка", "Фото успешно обрезано.");
 }
 
-void PhotoEditDialog::applyStyles() {
+void PhotoEditDialog::applyStyles()
+{
     QString styleSheet = R"(
         QDialog {
             background-color: #ffffff;
@@ -323,26 +422,37 @@ void PhotoEditDialog::applyStyles() {
     setStyleSheet(styleSheet);
 }
 
-bool PhotoEditDialog::eventFilter(QObject* obj, QEvent* event) {
-    if (obj == previewLabel) {
-        if (event->type() == QEvent::MouseButtonPress) {
-            QMouseEvent* me = static_cast<QMouseEvent*>(event);
-            if (me->button() == Qt::LeftButton) {
+bool PhotoEditDialog::eventFilter(QObject *obj, QEvent *event)
+{
+    if (obj == previewLabel)
+    {
+        if (event->type() == QEvent::MouseButtonPress)
+        {
+            QMouseEvent *me = static_cast<QMouseEvent *>(event);
+            if (me->button() == Qt::LeftButton)
+            {
                 selecting = true;
                 selectionOrigin = me->pos();
-                if (!rubberBand) {
+                if (!rubberBand)
+                {
                     rubberBand = new QRubberBand(QRubberBand::Rectangle, previewLabel);
                 }
                 rubberBand->setGeometry(QRect(selectionOrigin, QSize()));
                 rubberBand->show();
             }
-        } else if (event->type() == QEvent::MouseMove) {
-            if (selecting && rubberBand) {
-                QMouseEvent* me = static_cast<QMouseEvent*>(event);
+        }
+        else if (event->type() == QEvent::MouseMove)
+        {
+            if (selecting && rubberBand)
+            {
+                QMouseEvent *me = static_cast<QMouseEvent *>(event);
                 rubberBand->setGeometry(QRect(selectionOrigin, me->pos()).normalized());
             }
-        } else if (event->type() == QEvent::MouseButtonRelease) {
-            if (selecting && rubberBand) {
+        }
+        else if (event->type() == QEvent::MouseButtonRelease)
+        {
+            if (selecting && rubberBand)
+            {
                 selecting = false;
                 selectionRect = rubberBand->geometry();
             }
