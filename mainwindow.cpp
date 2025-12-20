@@ -670,8 +670,12 @@ void MainWindow::showFullScreen(Photo *photo)
     QPushButton *rightBtn = new QPushButton("▶", fullScreenDialog);
     leftBtn->setFixedSize(64, 64);
     rightBtn->setFixedSize(64, 64);
-    leftBtn->setStyleSheet("background-color: rgba(255,255,255,0.7); border-radius:32px; font-size:24px;");
-    rightBtn->setStyleSheet("background-color: rgba(255,255,255,0.7); border-radius:32px; font-size:24px;");
+    leftBtn->setStyleSheet("color: #b3b3b3;"
+                            "font-size: 35px;"
+                            "border: none;");
+    rightBtn->setStyleSheet("color: #b3b3b3;"
+                            "font-size: 35px;"
+                            "border: none;");
     leftBtn->setParent(fullScreenDialog);
     rightBtn->setParent(fullScreenDialog);
     leftBtn->move(40, QGuiApplication::primaryScreen()->geometry().center().y());
