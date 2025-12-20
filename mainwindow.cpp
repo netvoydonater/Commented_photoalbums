@@ -653,7 +653,9 @@ void MainWindow::showFullScreen(Photo *photo)
     topLayout->setContentsMargins(10, 10, 10, 10);
     topLayout->addStretch();
     QPushButton *closeBtn = new QPushButton("✕", topBar);
-    closeBtn->setFixedSize(44, 44);
+    closeBtn->setStyleSheet("color: #b3b3b3;"
+                            "font-size: 25px;"
+                            "border: none;");
     connect(closeBtn, &QPushButton::clicked, fullScreenDialog, &QDialog::close);
     topLayout->addWidget(closeBtn);
     layout->addWidget(topBar);
