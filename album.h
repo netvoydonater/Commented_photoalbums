@@ -26,7 +26,7 @@ public:
     int getYear() const;
     QJsonObject toJson() const;
     static Album *fromJson(const QJsonObject &obj);
-
+    ~Album();
     // Упрощённый сеттер имени альбома (для переименования из UI)
     void setName(const QString &newName) { name = newName; }
 

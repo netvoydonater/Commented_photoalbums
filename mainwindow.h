@@ -138,6 +138,7 @@ private slots:
     void dragEnterEvent(QDragEnterEvent *event) override;
     void dragLeaveEvent(QDragLeaveEvent *event) override;
 
+     void navigateFullScreen(int delta);
 private:
     User *currentUser;
     PhotoManager manager;
@@ -170,6 +171,12 @@ private:
     Photo *selectedPhoto;
     QList<Photo *> favorites; // Для избранного
 
+    // Полноэкранный просмотр
+    QDialog *fullScreenDialog = nullptr;
+    QLabel *fullScreenImageLabel = nullptr;
+    QList<Photo *> fullScreenPhotos;
+    int fullScreenIndex = -1;
+
     enum NavigationSection
     {
         AllPhotos,
@@ -195,6 +202,13 @@ private:
 
     // Удаляет указанный альбом из родительской структуры (рекурсивно). Возвращает true при удалении.
     bool removeAlbumFromParent(Album *target);
+
+    // Удалить все ссылки на фото (favorites, searchResults, fullScreenPhotos и т.д.)
+    void removePhotoReferences(Photo *photo);
+    void removePhotosReferencesFromList(const QList<Photo *> &photos);
+    void saveFavorites() const;
+    void loadFavorites();
+    Photo *findPhotoByPath(const QString &path) const;
 
 protected:
     void keyPressEvent(QKeyEvent *event) override;

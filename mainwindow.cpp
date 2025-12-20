@@ -31,6 +31,9 @@
 #include <QDragLeaveEvent>
 #include <QKeyEvent>
 #include <algorithm>
+#include <QJsonDocument>
+#include <QJsonArray>
+#include <QFileInfo>
 
 MainWindow::MainWindow(QWidget *parent)
     : QMainWindow(parent),
@@ -59,6 +62,9 @@ MainWindow::MainWindow(QWidget *parent)
     {
         populateTree(sub);
     }
+
+    // Загружаем избранное из отдельного файла
+    loadFavorites();
 
     // Открываем приложение в полноэкранном режиме
     showMaximized();
@@ -329,10 +335,9 @@ void MainWindow::createAlbum()
     if (!ok || name.trimmed().isEmpty())
         return;
 
-    int year = QDate::currentDate().year();
-    Album *yearAlbum = getOrCreateYearAlbum(year);
-
-    yearAlbum->addSubAlbum(new Album(name));
+    // Создаём альбом в корне (год — техническая метка, не место для добавления)
+    Album *root = currentUser->getRootAlbum();
+    root->addSubAlbum(new Album(name));
 
     rebuildAlbumsTree();
     updateCenterPanel();
@@ -354,7 +359,7 @@ void MainWindow::search()
     inSearchMode = false;
 
     // Разбираем запрос: имя (подстрока), опционально дата yyyy-MM-dd и/или тег (tag:имя или #имя)
-    QStringList tokens = query.split(QRegExp("\s+"), QString::SkipEmptyParts);
+    QStringList tokens = query.split(QRegExp("\\s+"), QString::SkipEmptyParts);
     QString namePart;
     QDate datePart;
     QString tagPart;
@@ -366,11 +371,11 @@ void MainWindow::search()
         }
         else if (t.startsWith("tag:", Qt::CaseInsensitive))
         {
-            tagPart = t.mid(4);
+            tagPart = t.mid(4).trimmed();
         }
         else if (t.startsWith('#'))
         {
-            tagPart = t.mid(1);
+            tagPart = t.mid(1).trimmed();
         }
         else if (namePart.isEmpty())
         {
@@ -401,7 +406,7 @@ void MainWindow::search()
             bool has = false;
             for (const Tag &tg : p->getTags())
             {
-                if (tg.getName().compare(tagPart, Qt::CaseInsensitive) == 0)
+                if (tg.getName().contains(tagPart, Qt::CaseInsensitive))
                 {
                     has = true;
                     break;
@@ -432,6 +437,16 @@ void MainWindow::switchUser()
     LoginDialog login(this);
     if (login.exec() == QDialog::Accepted)
     {
+        // Close any fullscreen viewer before switching user to avoid dangling photo pointers
+        if (fullScreenDialog)
+        {
+            fullScreenDialog->close();
+            fullScreenDialog = nullptr;
+            fullScreenImageLabel = nullptr;
+            fullScreenPhotos.clear();
+            fullScreenIndex = -1;
+        }
+
         delete currentUser;
         currentUser = User::loadFromJson(login.getUserName() + ".json");
         if (!currentUser)
@@ -486,6 +501,8 @@ void MainWindow::deleteItem()
         "Удалить " + name + "?",
         QMessageBox::Yes | QMessageBox::No);
 
+    Photo *toDelPhoto = nullptr;
+
     if (reply == QMessageBox::Yes)
     {
         if (selectedPhoto)
@@ -512,25 +529,48 @@ void MainWindow::deleteItem()
             {
                 albumWithPhoto->removePhoto(selectedPhoto);
             }
-            delete selectedPhoto;
+            // Отложим удаление объекта до обновления UI
+            toDelPhoto = selectedPhoto;
             selectedPhoto = nullptr;
         }
         else if (selectedAlbum)
         {
-            // Удаляем альбом рекурсивно из родителя
-            if (removeAlbumFromParent(selectedAlbum))
+            // Удаляем альбом рекурсивно из родителя — удаляем объект после обновления UI
+            Album *toDelAlbum = selectedAlbum;
+            if (removeAlbumFromParent(toDelAlbum))
             {
-                delete selectedAlbum;
+                // Удаляем ссылки на фото из других коллекций перед удалением объекта
+                QList<Photo *> photosInAlbum = manager.getAllPhotos(toDelAlbum);
+                removePhotosReferencesFromList(photosInAlbum);
+
                 selectedAlbum = nullptr;
+                rebuildAlbumsTree();
+                updateCenterPanel();
+                delete toDelAlbum;
+
+                // Сохраним состояние пользователя сразу после удаления
+                currentUser->saveToJson(currentUser->getName() + ".json");
             }
         }
-        // Перестраиваем дерево альбомов без технического корня
+        // Перестраиваем дерево альбомов без технического корня и обновляем UI
         albumsTree->clear();
         for (Album *sub : currentUser->getRootAlbum()->getSubAlbums())
         {
             populateTree(sub);
         }
         updateCenterPanel();
+
+        // Теперь можно удалить объект фото (если был)
+        if (toDelPhoto)
+        {
+            // Удаляем ссылки на фото из коллекций
+            removePhotoReferences(toDelPhoto);
+            delete toDelPhoto;
+            toDelPhoto = nullptr;
+
+            // Сохраним состояние пользователя
+            currentUser->saveToJson(currentUser->getName() + ".json");
+        }
     }
 }
 
@@ -549,59 +589,91 @@ void MainWindow::editPhoto()
 
 void MainWindow::showFullScreen(Photo *photo)
 {
-    if (!photo)
-        return;
+    if (!photo) return;
 
-    QDialog *fullDialog = new QDialog(this);
-    fullDialog->setWindowFlags(Qt::Window | Qt::FramelessWindowHint);
-    fullDialog->setAttribute(Qt::WA_DeleteOnClose);
-    fullDialog->setStyleSheet("background-color: black;");
+    // Собираем текущий список фотографий для навигации
+    fullScreenPhotos.clear();
+    if (inSearchMode)
+        fullScreenPhotos = searchResults;
+    else if (currentSection == Favorites)
+        fullScreenPhotos = favorites;
+    else if (currentSection == Recent)
+    {
+        QList<Photo *> all = manager.getAllPhotos(currentUser->getRootAlbum());
+        std::sort(all.begin(), all.end(), [](Photo *a, Photo *b){ return a->getDate() > b->getDate();});
+        int count = qMin(20, all.size());
+        for (int i=0;i<count;++i) fullScreenPhotos.append(all[i]);
+    }
+    else
+    {
+        Album *album = selectedAlbum ? selectedAlbum : currentUser->getRootAlbum();
+        fullScreenPhotos = manager.getAllPhotos(album);
+    }
 
-    QVBoxLayout *layout = new QVBoxLayout(fullDialog);
-    layout->setContentsMargins(0, 0, 0, 0);
+    // Найдём индекс текущего фото
+    fullScreenIndex = fullScreenPhotos.indexOf(photo);
+    if (fullScreenIndex < 0) fullScreenIndex = 0;
 
-    // Верхняя панель с кнопкой закрытия
-    QWidget *topBar = new QWidget(fullDialog);
-    topBar->setStyleSheet("background-color: rgba(0, 0, 0, 150);");
+    // Создаём диалог (и пересоздаём при повторном открытии)
+    if (fullScreenDialog)
+    {
+        fullScreenDialog->close();
+        delete fullScreenDialog;
+        fullScreenDialog = nullptr;
+    }
+
+    fullScreenDialog = new QDialog(this);
+    fullScreenDialog->setWindowFlags(Qt::Window | Qt::FramelessWindowHint);
+    fullScreenDialog->setAttribute(Qt::WA_DeleteOnClose);
+    fullScreenDialog->setStyleSheet("background-color: black;");
+
+    // Обнулять указатели при удалении диалога (WA_DeleteOnClose вызовет destroyed)
+    connect(fullScreenDialog, &QObject::destroyed, this, [this]() {
+        fullScreenDialog = nullptr;
+        fullScreenImageLabel = nullptr;
+        fullScreenPhotos.clear();
+        fullScreenIndex = -1;
+    });
+
+    QVBoxLayout *layout = new QVBoxLayout(fullScreenDialog);
+    layout->setContentsMargins(0,0,0,0);
+
+    // Top bar with close
+    QWidget *topBar = new QWidget(fullScreenDialog);
+    topBar->setStyleSheet("background-color: rgba(0,0,0,150);");
     QHBoxLayout *topLayout = new QHBoxLayout(topBar);
-    topLayout->setContentsMargins(10, 10, 10, 10);
-
+    topLayout->setContentsMargins(10,10,10,10);
     topLayout->addStretch();
-
     QPushButton *closeBtn = new QPushButton("✕", topBar);
-    closeBtn->setStyleSheet(R"(
-        QPushButton {
-            background-color: rgba(255,255,255,0.9);
-            color: #333333;
-            border: none;
-            border-radius: 20px;
-            font-size: 20px;
-            padding: 5px;
-            min-width: 40px;
-            min-height: 40px;
-        }
-        QPushButton:hover {
-            background-color: rgba(240,240,240,0.95);
-        }
-    )");
-    connect(closeBtn, &QPushButton::clicked, fullDialog, &QDialog::close);
+    closeBtn->setFixedSize(44,44);
+    connect(closeBtn, &QPushButton::clicked, fullScreenDialog, &QDialog::close);
     topLayout->addWidget(closeBtn);
-
     layout->addWidget(topBar);
 
-    // Изображение
-    QLabel *imageLabel = new QLabel(fullDialog);
-    imageLabel->setAlignment(Qt::AlignCenter);
-    QPixmap pixmap(photo->getFilePath());
+    // Image label (member)
+    fullScreenImageLabel = new QLabel(fullScreenDialog);
+    fullScreenImageLabel->setAlignment(Qt::AlignCenter);
+    layout->addWidget(fullScreenImageLabel, 1);
 
-    QRect screenGeom = QGuiApplication::primaryScreen()->geometry();
-    int maxWidth = screenGeom.width() - 100;
-    int maxHeight = screenGeom.height() - 150;
+    // Navigation arrows overlay (left/right)
+    QPushButton *leftBtn = new QPushButton("◀", fullScreenDialog);
+    QPushButton *rightBtn = new QPushButton("▶", fullScreenDialog);
+    leftBtn->setFixedSize(64,64);
+    rightBtn->setFixedSize(64,64);
+    leftBtn->setStyleSheet("background-color: rgba(255,255,255,0.7); border-radius:32px; font-size:24px;");
+    rightBtn->setStyleSheet("background-color: rgba(255,255,255,0.7); border-radius:32px; font-size:24px;");
+    leftBtn->setParent(fullScreenDialog);
+    rightBtn->setParent(fullScreenDialog);
+    leftBtn->move(40, QGuiApplication::primaryScreen()->geometry().center().y());
+    rightBtn->move(QGuiApplication::primaryScreen()->geometry().width()-120, QGuiApplication::primaryScreen()->geometry().center().y());
+    leftBtn->show(); rightBtn->show();
+    connect(leftBtn, &QPushButton::clicked, this, [this]() { navigateFullScreen(-1); });
+    connect(rightBtn, &QPushButton::clicked, this, [this]() { navigateFullScreen(1); });
 
-    imageLabel->setPixmap(pixmap.scaled(maxWidth, maxHeight, Qt::KeepAspectRatio, Qt::SmoothTransformation));
-    layout->addWidget(imageLabel, 1);
+    // Показываем изображение
+    navigateFullScreen(0);
 
-    fullDialog->showMaximized();
+    fullScreenDialog->showMaximized();
 }
 
 void MainWindow::onLeftPanelItemClicked(QListWidgetItem *item)
@@ -690,13 +762,21 @@ void MainWindow::onAlbumTreeContextMenu(const QPoint &pos)
         QMessageBox::StandardButton reply = QMessageBox::question(this, "Удаление", "Удалить альбом " + album->getName() + "?", QMessageBox::Yes | QMessageBox::No);
         if (reply == QMessageBox::Yes)
         {
-            if (removeAlbumFromParent(album))
-            {
-                delete album;
-                selectedAlbum = nullptr;
-                rebuildAlbumsTree();
-                updateCenterPanel();
-            }
+                if (removeAlbumFromParent(album))
+                {
+                    // Удаляем ссылки на фото из других коллекций перед удалением объекта
+                    QList<Photo *> photosInAlbum = manager.getAllPhotos(album);
+                    removePhotosReferencesFromList(photosInAlbum);
+
+                    // Обновляем UI прежде чем удалять объект, чтобы виджеты не ссылались на удалённый объект
+                    selectedAlbum = nullptr;
+                    rebuildAlbumsTree();
+                    updateCenterPanel();
+                    delete album;
+
+                    // Сохраняем состояние
+                    currentUser->saveToJson(currentUser->getName() + ".json");
+                }
         }
     }
 }
@@ -1103,15 +1183,16 @@ void MainWindow::renderFeed(QWidget *container)
 
 void MainWindow::renderGrid(QWidget *container)
 {
-
-    QVBoxLayout *mainLayout = new QVBoxLayout(container);
+    QVBoxLayout *mainLayout = qobject_cast<QVBoxLayout *>(container->layout());
+    if (!mainLayout)
+        mainLayout = new QVBoxLayout(container);
 
     QScrollArea *scroll = new QScrollArea(container);
     scroll->setWidgetResizable(true);
 
     QWidget *content = new QWidget();
     QGridLayout *grid = new QGridLayout(content);
-    grid->setSpacing(10);
+    grid->setSpacing(14);
 
     QList<Photo *> photos;
     if (inSearchMode)
@@ -1140,26 +1221,49 @@ void MainWindow::renderGrid(QWidget *container)
     int col = 0, row = 0;
     const int columns = 3;
 
+    if (photos.isEmpty())
+    {
+        QLabel *emptyLabel = new QLabel("Нет фотографий", content);
+        emptyLabel->setAlignment(Qt::AlignCenter);
+        grid->addWidget(emptyLabel, 0, 0, 1, columns, Qt::AlignCenter);
+        scroll->setWidget(content);
+        mainLayout->addWidget(scroll);
+        return;
+    }
+
     for (Photo *photo : photos)
     {
-        QWidget *card = new QWidget(content);
+        ClickablePhotoWidget *card = new ClickablePhotoWidget(photo, content);
         card->setObjectName("photoGridCard");
+        card->setCursor(Qt::PointingHandCursor);
 
         QVBoxLayout *cardLayout = new QVBoxLayout(card);
-        cardLayout->setSpacing(4);
-        cardLayout->setContentsMargins(4, 4, 4, 4);
+        cardLayout->setSpacing(6);
+        cardLayout->setContentsMargins(6, 6, 6, 6);
 
         QLabel *img = new QLabel(card);
         img->setPixmap(QPixmap(photo->getFilePath())
-                           .scaled(340, 340, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+                           .scaled(440, 440, Qt::KeepAspectRatio, Qt::SmoothTransformation));
         img->setAlignment(Qt::AlignCenter);
-        img->setFixedSize(340, 340);
+        img->setFixedSize(440, 360);
         cardLayout->addWidget(img);
 
         QLabel *name = new QLabel(QFileInfo(photo->getFilePath()).fileName(), card);
         name->setAlignment(Qt::AlignCenter);
         name->setWordWrap(true);
         cardLayout->addWidget(name);
+
+        connect(card, &ClickablePhotoWidget::clicked, this, [this, photo]() {
+            selectedPhoto = photo;
+            updatePropertiesPanel();
+        });
+        connect(card, &ClickablePhotoWidget::doubleClicked, this, [this, photo]() {
+            showFullScreen(photo);
+        });
+        connect(card, &ClickablePhotoWidget::rightClicked, this, [this, photo](Photo *, const QPoint &pos) {
+            selectedPhoto = photo;
+            handleRightClick(pos);
+        });
 
         grid->addWidget(card, row, col);
 
@@ -1322,9 +1426,9 @@ QWidget *MainWindow::createPhotoCard(Photo *photo, QWidget *parent)
     layout->setContentsMargins(10, 10, 10, 10);
 
     QLabel *img = new QLabel(card);
-    img->setFixedSize(240, 240);
+    img->setFixedSize(320, 320);
     img->setPixmap(QPixmap(photo->getFilePath())
-                       .scaled(240, 240, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+                       .scaled(320, 320, Qt::KeepAspectRatio, Qt::SmoothTransformation));
     layout->addWidget(img);
 
     QVBoxLayout *info = new QVBoxLayout();
@@ -1445,10 +1549,18 @@ QWidget *MainWindow::createAlbumCard(Album *album, QWidget *parent)
             QMessageBox::StandardButton reply = QMessageBox::question(this, "Удаление", "Удалить альбом " + album->getName() + "?", QMessageBox::Yes | QMessageBox::No);
             if (reply == QMessageBox::Yes) {
                 if (removeAlbumFromParent(album)) {
-                    delete album;
+                    // Удаляем ссылки на фото из других коллекций перед удалением объекта
+                    QList<Photo *> photosInAlbum = manager.getAllPhotos(album);
+                    removePhotosReferencesFromList(photosInAlbum);
+
+                    // Обновляем UI до удаления объекта, чтобы виджеты не ссылались на удалённый объект
                     selectedAlbum = nullptr;
                     rebuildAlbumsTree();
                     updateCenterPanel();
+                    delete album;
+
+                    // Сохраняем состояние
+                    currentUser->saveToJson(currentUser->getName() + ".json");
                 }
             }
         } });
@@ -1552,6 +1664,10 @@ void MainWindow::addToFavorites(Photo *photo)
     if (!favorites.contains(photo))
     {
         favorites.append(photo);
+        // Обновляем представление и сохраняем изменения в user.json
+        updateCenterPanel();
+        saveFavorites();
+        currentUser->saveToJson(currentUser->getName() + ".json");
         QMessageBox::information(this, "Избранное", "Фото добавлено в избранное");
     }
 }
@@ -1722,6 +1838,22 @@ void MainWindow::keyPressEvent(QKeyEvent *event)
         event->accept();
         return;
     }
+    // Навигация в полноэкранном режиме
+    if (fullScreenDialog && fullScreenDialog->isVisible())
+    {
+        if (event->key() == Qt::Key_Left)
+        {
+            navigateFullScreen(-1);
+            event->accept();
+            return;
+        }
+        else if (event->key() == Qt::Key_Right)
+        {
+            navigateFullScreen(1);
+            event->accept();
+            return;
+        }
+    }
     QMainWindow::keyPressEvent(event);
 }
 
@@ -1744,6 +1876,131 @@ bool MainWindow::removeAlbumFromParent(Album *target)
         }
     }
     return false;
+}
+
+void MainWindow::navigateFullScreen(int delta)
+{
+    if (fullScreenPhotos.isEmpty() || !fullScreenDialog)
+        return;
+
+    if (delta != 0)
+    {
+        fullScreenIndex += delta;
+        if (fullScreenIndex < 0) fullScreenIndex = 0;
+        if (fullScreenIndex >= fullScreenPhotos.size()) fullScreenIndex = fullScreenPhotos.size() - 1;
+    }
+
+    Photo *p = fullScreenPhotos.value(fullScreenIndex, nullptr);
+    if (!p) return;
+
+    QPixmap pix(p->getFilePath());
+    QRect screenGeom = QGuiApplication::primaryScreen()->geometry();
+    int maxWidth = screenGeom.width() - 100;
+    int maxHeight = screenGeom.height() - 150;
+    if (fullScreenImageLabel)
+        fullScreenImageLabel->setPixmap(pix.scaled(maxWidth, maxHeight, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+}
+
+void MainWindow::saveFavorites() const
+{
+    if (!currentUser) return;
+    QString fn = currentUser->getName() + ".json";
+    QFile f(fn);
+    QJsonObject userObj;
+    if (f.exists() && f.open(QIODevice::ReadOnly))
+    {
+        QJsonDocument doc = QJsonDocument::fromJson(f.readAll());
+        userObj = doc.object();
+        f.close();
+    }
+    QJsonArray arr;
+    for (Photo *p : favorites)
+    {
+        if (p)
+            arr.append(p->getFilePath());
+    }
+    userObj["favorites"] = arr;
+    QJsonDocument out(userObj);
+    if (f.open(QIODevice::WriteOnly | QIODevice::Truncate))
+    {
+        f.write(out.toJson());
+        f.close();
+    }
+}
+
+void MainWindow::loadFavorites()
+{
+    favorites.clear();
+    if (!currentUser) return;
+    QString fn = currentUser->getName() + ".json";
+    QFile f(fn);
+    if (!f.exists()) return;
+    if (!f.open(QIODevice::ReadOnly)) return;
+    QJsonDocument doc = QJsonDocument::fromJson(f.readAll());
+    f.close();
+    if (!doc.isObject()) return;
+    QJsonObject userObj = doc.object();
+    if (!userObj.contains("favorites")) return;
+    QJsonArray arr = userObj["favorites"].toArray();
+    for (const QJsonValue &v : arr)
+    {
+        QString path = v.toString();
+        Photo *p = findPhotoByPath(path);
+        if (p && !favorites.contains(p))
+            favorites.append(p);
+    }
+}
+
+Photo *MainWindow::findPhotoByPath(const QString &path) const
+{
+    if (!currentUser) return nullptr;
+    QList<Photo *> all = manager.getAllPhotos(currentUser->getRootAlbum());
+    for (Photo *p : all)
+    {
+        if (QFileInfo(p->getFilePath()).absoluteFilePath() == QFileInfo(path).absoluteFilePath())
+            return p;
+    }
+    return nullptr;
+}
+
+void MainWindow::removePhotoReferences(Photo *photo)
+{
+    if (!photo) return;
+
+    // Remove from favorites
+    while (favorites.removeOne(photo)) {}
+
+    // Remove from search results
+    while (searchResults.removeOne(photo)) {}
+
+    // Remove from full screen list and adjust index
+    int removedIndex = -1;
+    for (int i = fullScreenPhotos.size() - 1; i >= 0; --i)
+    {
+        if (fullScreenPhotos[i] == photo)
+        {
+            removedIndex = i;
+            fullScreenPhotos.removeAt(i);
+        }
+    }
+    if (removedIndex != -1)
+    {
+        if (fullScreenIndex >= fullScreenPhotos.size())
+            fullScreenIndex = fullScreenPhotos.size() - 1;
+    }
+
+    // If selectedPhoto references this, clear it
+    if (selectedPhoto == photo)
+        selectedPhoto = nullptr;
+
+    // Persist favorites if changed
+    saveFavorites();
+}
+
+void MainWindow::removePhotosReferencesFromList(const QList<Photo *> &photos)
+{
+    for (Photo *p : photos)
+        removePhotoReferences(p);
 }
 
 void MainWindow::applyStyleSheet()

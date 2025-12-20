@@ -8,6 +8,7 @@
 class User {
 public:
     User(const QString& name);
+    ~User();
     QString getName() const;
     void setRootAlbum(Album* album);
     Album* getRootAlbum() const;

@@ -20,12 +20,15 @@ PhotoEditDialog::PhotoEditDialog(Photo *photo, Album *rootAlbum, QWidget *parent
     : QDialog(parent), photo(photo), rootAlbum(rootAlbum)
 {
     setWindowTitle("Редактирование");
-    resize(1000, 700);
     setupUI();
     applyStyles();
 }
 
-PhotoEditDialog::~PhotoEditDialog() {}
+PhotoEditDialog::~PhotoEditDialog()
+{
+    if (rubberBand)
+        delete rubberBand;
+}
 
 void PhotoEditDialog::setupUI()
 {
@@ -62,7 +65,7 @@ void PhotoEditDialog::setupUI()
     int maxHeight = 500;
     QPixmap scaled = originalPixmap.scaled(maxWidth, maxHeight, Qt::KeepAspectRatio, Qt::SmoothTransformation);
     previewLabel->setPixmap(scaled);
-    previewLabel->setFixedSize(scaled.size());
+    previewLabel->setMaximumSize(scaled.size());
     previewLabel->installEventFilter(this);
 
     leftLayout->addWidget(previewLabel, 1);
@@ -215,25 +218,27 @@ void PhotoEditDialog::setupUI()
 
 void PhotoEditDialog::saveChanges()
 {
-    // Сохранение тегов
+    // Сохранение тегов (без дубликатов)
     QString tagsText = tagEdit->text();
     if (!tagsText.isEmpty())
     {
         QStringList tags = tagsText.split(",", QString::SkipEmptyParts);
+        QSet<QString> existing;
+        for (const Tag &t : photo->getTags()) existing.insert(t.getName().toLower());
         for (const QString &tagName : tags)
         {
             QString trimmedTag = tagName.trimmed();
-            if (!trimmedTag.isEmpty())
-            {
-                photo->addTag(Tag(trimmedTag));
-            }
+            if (trimmedTag.isEmpty()) continue;
+            if (existing.contains(trimmedTag.toLower())) continue;
+            photo->addTag(Tag(trimmedTag));
+            existing.insert(trimmedTag.toLower());
         }
     }
 
     // Сохранение комментария
     photo->setDescription(commentEdit->toPlainText());
 
-    // Перемещение фото
+    // Перемещение фото (проверяем валидность target)
     if (moveCombo)
     {
         Album *target = qvariant_cast<Album *>(moveCombo->currentData());
@@ -245,7 +250,7 @@ void PhotoEditDialog::saveChanges()
             while (!stack.isEmpty())
             {
                 Album *a = stack.takeLast();
-                if (a->getPhotos().contains(photo))
+                if (a && a->getPhotos().contains(photo))
                 {
                     currentAlbum = a;
                     break;
@@ -257,7 +262,9 @@ void PhotoEditDialog::saveChanges()
             {
                 if (currentAlbum)
                     currentAlbum->removePhoto(photo);
-                target->addPhoto(photo);
+                // Protect against invalid target pointer
+                if (target)
+                    target->addPhoto(photo);
             }
         }
     }
@@ -278,7 +285,6 @@ void PhotoEditDialog::collectAlbums(Album *album, QList<Album *> &list)
 void PhotoEditDialog::addToFavorites()
 {
     emit addToFavoritesRequested(photo);
-    QMessageBox::information(this, "Избранное", "Фото добавлено в избранное");
 }
 
 void PhotoEditDialog::applyCrop()

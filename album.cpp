@@ -81,3 +81,15 @@ Album* Album::fromJson(const QJsonObject& obj) {
     }
     return album;
 }
+
+Album::~Album()
+{
+    for (Photo* p : photos) {
+        delete p;
+    }
+    photos.clear();
+    for (Album* a : subAlbums) {
+        delete a;
+    }
+    subAlbums.clear();
+}
