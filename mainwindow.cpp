@@ -822,6 +822,12 @@ void MainWindow::updateCenterPanel()
     // Если раздел — Альбомы и альбом не выбран => отображаем список альбомов (без вкладок)
     if (currentSection == Albums && !selectedAlbum)
     {
+        QVBoxLayout *layout = new QVBoxLayout(currentTab);
+        layout->setContentsMargins(20, 20, 20, 20);
+
+        QLabel *title = new QLabel("Альбомы", currentTab);
+        title->setObjectName("sectionTitle");
+        layout->addWidget(title);
         tabWidget->tabBar()->setVisible(false);
         renderAlbums(currentTab);
         updatePropertiesPanel();
@@ -909,9 +915,33 @@ void MainWindow::updateCenterPanel()
         return;
     }
 
+    else if (currentSection == Recent)
+    {
+        QVBoxLayout *layout = new QVBoxLayout(currentTab);
+        layout->setContentsMargins(20, 20, 20, 20);
+
+        QLabel *title = new QLabel("Недавно добавленное", currentTab);
+        title->setObjectName("sectionTitle");
+        layout->addWidget(title);
+    }
+
     // --- ОБЫЧНЫЕ РЕЖИМЫ ---
     QVBoxLayout *layout = new QVBoxLayout(currentTab);
-    layout->setContentsMargins(10, 10, 10, 10);
+    layout->setContentsMargins(20, 20, 20, 20);
+
+    // Добавляем заголовок для разделов
+    QLabel *title = nullptr;
+
+    if (currentSection == AllPhotos)
+        title = new QLabel("Все фотографии", currentTab);
+    else if (currentSection == Favorites)
+        title = new QLabel("Избранное", currentTab);
+
+    if (title)
+    {
+        title->setObjectName("sectionTitle");
+        layout->addWidget(title);
+    }
 
     if (index == 0)
         renderFeed(currentTab);
@@ -919,6 +949,17 @@ void MainWindow::updateCenterPanel()
         renderGrid(currentTab);
 
     updatePropertiesPanel();
+
+    /*    // --- ОБЫЧНЫЕ РЕЖИМЫ ---
+        QVBoxLayout *layout = new QVBoxLayout(currentTab);
+        layout->setContentsMargins(10, 10, 10, 10);
+
+        if (index == 0)
+            renderFeed(currentTab);
+        else if (index == 1)
+            renderGrid(currentTab);
+
+        updatePropertiesPanel();*/
 }
 
 void MainWindow::updatePropertiesPanel()
