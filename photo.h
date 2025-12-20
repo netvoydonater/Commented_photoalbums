@@ -6,20 +6,22 @@
 #include <QList>
 #include "tag.h"
 
-class Photo {
+class Photo
+{
 public:
-    Photo(const QString& filePath, const QString& description, const QDateTime& date);
+    Photo(const QString &filePath, const QString &description, const QDateTime &date);
     QString getFilePath() const;
     QString getDescription() const;
     QDateTime getDate() const;
     QList<Tag> getTags() const;
-    void addTag(const Tag& tag);
-    void setDescription(const QString& desc);
-    void setDate(const QDateTime& date);
-    void setFilePath(const QString& path);  // Добавленный setter
-    void crop(const QRect& rect); // Простая обрезка (использует QImage)
+    void addTag(const Tag &tag);
+    void removeTag(const QString &name);
+    void setDescription(const QString &desc);
+    void setDate(const QDateTime &date);
+    void setFilePath(const QString &path); // Добавленный setter
+    void crop(const QRect &rect);          // Простая обрезка (использует QImage)
     QJsonObject toJson() const;
-    static Photo* fromJson(const QJsonObject& obj);
+    static Photo *fromJson(const QJsonObject &obj);
 
 private:
     QString filePath;
@@ -28,6 +30,6 @@ private:
     QList<Tag> tags;
 };
 
-Q_DECLARE_METATYPE(Photo*)
+Q_DECLARE_METATYPE(Photo *)
 
 #endif // PHOTO_H
