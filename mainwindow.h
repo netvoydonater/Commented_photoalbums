@@ -138,7 +138,8 @@ private slots:
     void dragEnterEvent(QDragEnterEvent *event) override;
     void dragLeaveEvent(QDragLeaveEvent *event) override;
 
-     void navigateFullScreen(int delta);
+    void navigateFullScreen(int delta);
+
 private:
     User *currentUser;
     PhotoManager manager;
@@ -212,6 +213,8 @@ private:
 
 protected:
     void keyPressEvent(QKeyEvent *event) override;
+
+private:
 };
 
 #endif // MAINWINDOW_H

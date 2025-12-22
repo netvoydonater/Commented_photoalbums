@@ -12,6 +12,7 @@
 #include <QMessageBox>
 #include <QGraphicsView>
 #include <QGuiApplication>
+#include <QCoreApplication>
 #include <QScreen>
 #include <QDate>
 #include <QInputDialog>
@@ -30,7 +31,9 @@
 #include <QPushButton>
 #include <QDragLeaveEvent>
 #include <QKeyEvent>
+
 #include <algorithm>
+#include <functional>
 #include <QJsonDocument>
 #include <QJsonArray>
 #include <QFileInfo>
@@ -57,11 +60,7 @@ MainWindow::MainWindow(QWidget *parent)
     setupUI();
     applyStyleSheet();
     // Заполняем дерево альбомов (скрываем технический корень)
-    albumsTree->clear();
-    for (Album *sub : currentUser->getRootAlbum()->getSubAlbums())
-    {
-        populateTree(sub);
-    }
+    rebuildAlbumsTree();
 
     // Загружаем избранное из отдельного файла
     loadFavorites();
@@ -78,7 +77,9 @@ MainWindow::~MainWindow()
 {
     if (currentUser)
     {
+        QCoreApplication::processEvents();
         currentUser->saveToJson(currentUser->getName() + ".json");
+        QCoreApplication::processEvents();
         delete currentUser;
         currentUser = nullptr;
     }
@@ -322,6 +323,11 @@ void MainWindow::addPhoto()
         userLabel->setText(currentUser->getName() + "\nЛокальное хранилище: " +
                            QString::number(photoCount) + " фото");
 
+        // Сохраняем состояние пользователя
+        QCoreApplication::processEvents();
+        currentUser->saveToJson(currentUser->getName() + ".json");
+        QCoreApplication::processEvents();
+
         // Уведомление
         QString message = files.size() == 1
                               ? "Добавлено 1 фото"
@@ -339,12 +345,17 @@ void MainWindow::createAlbum()
     if (!ok || name.trimmed().isEmpty())
         return;
 
-    // Создаём альбом в корне (год — техническая метка, не место для добавления)
-    Album *root = currentUser->getRootAlbum();
-    root->addSubAlbum(new Album(name));
+    // Создаём альбом в контейнере по году (если нет — создаём годовой контейнер)
+    Album *yearAlbum = getOrCreateYearAlbum(QDate::currentDate().year());
+    yearAlbum->addSubAlbum(new Album(name));
 
     rebuildAlbumsTree();
     updateCenterPanel();
+
+    // Сохраняем состояние пользователя сразу после создания
+    QCoreApplication::processEvents();
+    currentUser->saveToJson(currentUser->getName() + ".json");
+    QCoreApplication::processEvents();
 }
 
 void MainWindow::createFolder()
@@ -437,7 +448,9 @@ void MainWindow::search()
 
 void MainWindow::switchUser()
 {
+    QCoreApplication::processEvents();
     currentUser->saveToJson(currentUser->getName() + ".json");
+    QCoreApplication::processEvents();
     LoginDialog login(this);
     if (login.exec() == QDialog::Accepted)
     {
@@ -463,12 +476,8 @@ void MainWindow::switchUser()
         searchResults.clear();
         inSearchMode = false;
 
-        // Перестраиваем дерево альбомов без технического корня
-        albumsTree->clear();
-        for (Album *sub : currentUser->getRootAlbum()->getSubAlbums())
-        {
-            populateTree(sub);
-        }
+        // Перестраиваем дерево альбомов с группировкой по годам
+        rebuildAlbumsTree();
 
         // Обновляем шапку (аватар и счётчик)
         QString firstLetter = currentUser->getName().left(1).toUpper();
@@ -550,18 +559,35 @@ void MainWindow::deleteItem()
                 selectedAlbum = nullptr;
                 rebuildAlbumsTree();
                 updateCenterPanel();
+
+                // Закрываем полноэкранный просмотр, если он содержит фото из удаляемого альбома
+                if (fullScreenDialog && !fullScreenPhotos.isEmpty())
+                {
+                    QList<Photo *> photosInAlbum = manager.getAllPhotos(toDelAlbum);
+                    for (Photo *p : photosInAlbum)
+                    {
+                        if (fullScreenPhotos.contains(p))
+                        {
+                            fullScreenDialog->close();
+                            break;
+                        }
+                    }
+                }
+
                 delete toDelAlbum;
 
                 // Сохраним состояние пользователя сразу после удаления
+                QCoreApplication::processEvents();
                 currentUser->saveToJson(currentUser->getName() + ".json");
+                QCoreApplication::processEvents();
+
+                // Обновляем счётчик в шапке
+                int photoCountAfterDel = manager.getAllPhotos(currentUser->getRootAlbum()).size();
+                userLabel->setText(currentUser->getName() + "\nЛокальное хранилище: " + QString::number(photoCountAfterDel) + " фото");
             }
         }
-        // Перестраиваем дерево альбомов без технического корня и обновляем UI
-        albumsTree->clear();
-        for (Album *sub : currentUser->getRootAlbum()->getSubAlbums())
-        {
-            populateTree(sub);
-        }
+        // Перестраиваем дерево альбомов с группировкой по годам и обновляем UI
+        rebuildAlbumsTree();
         updateCenterPanel();
 
         // Теперь можно удалить объект фото (если был)
@@ -573,7 +599,13 @@ void MainWindow::deleteItem()
             toDelPhoto = nullptr;
 
             // Сохраним состояние пользователя
+            QCoreApplication::processEvents();
             currentUser->saveToJson(currentUser->getName() + ".json");
+            QCoreApplication::processEvents();
+
+            // Обновляем счётчик в шапке
+            int photoCountAfterDel = manager.getAllPhotos(currentUser->getRootAlbum()).size();
+            userLabel->setText(currentUser->getName() + "\nЛокальное хранилище: " + QString::number(photoCountAfterDel) + " фото");
         }
     }
 }
@@ -671,8 +703,8 @@ void MainWindow::showFullScreen(Photo *photo)
     leftBtn->setFixedSize(64, 64);
     rightBtn->setFixedSize(64, 64);
     leftBtn->setStyleSheet("color: #b3b3b3;"
-                            "font-size: 35px;"
-                            "border: none;");
+                           "font-size: 35px;"
+                           "border: none;");
     rightBtn->setStyleSheet("color: #b3b3b3;"
                             "font-size: 35px;"
                             "border: none;");
@@ -789,10 +821,31 @@ void MainWindow::onAlbumTreeContextMenu(const QPoint &pos)
                 selectedAlbum = nullptr;
                 rebuildAlbumsTree();
                 updateCenterPanel();
+
+                // Закрываем полноэкранный просмотр, если он содержит фото из удаляемого альбома
+                if (fullScreenDialog && !fullScreenPhotos.isEmpty())
+                {
+                    QList<Photo *> photosInAlbum = manager.getAllPhotos(album);
+                    for (Photo *p : photosInAlbum)
+                    {
+                        if (fullScreenPhotos.contains(p))
+                        {
+                            fullScreenDialog->close();
+                            break;
+                        }
+                    }
+                }
+
                 delete album;
 
                 // Сохраняем состояние
+                QCoreApplication::processEvents();
                 currentUser->saveToJson(currentUser->getName() + ".json");
+                QCoreApplication::processEvents();
+
+                // Обновляем счётчик в шапке
+                int photoCountAfterDel = manager.getAllPhotos(currentUser->getRootAlbum()).size();
+                userLabel->setText(currentUser->getName() + "\nЛокальное хранилище: " + QString::number(photoCountAfterDel) + " фото");
             }
         }
     }
@@ -809,6 +862,10 @@ void MainWindow::updateCenterPanel()
         (currentSection == Albums && selectedAlbum != nullptr);
 
     tabWidget->tabBar()->setVisible(showTabs);
+
+    // Если мы не внутри конкретного альбома — показываем общий заголовок приложения
+    if (!(currentSection == Albums && selectedAlbum != nullptr))
+        setWindowTitle("Фотоальбомы с комментариями");
 
     QWidget *currentTab = tabWidget->widget(index);
 
@@ -836,6 +893,16 @@ void MainWindow::updateCenterPanel()
         layout->addWidget(title);
         tabWidget->tabBar()->setVisible(false);
         renderAlbums(currentTab);
+        updatePropertiesPanel();
+        return;
+    }
+
+    // Если раздел — Альбомы и выбран конкретный альбом — отображаем его содержимое
+    if (currentSection == Albums && selectedAlbum)
+    {
+        // Показываем вкладки (Лента/Сетка) при просмотре альбома
+        tabWidget->tabBar()->setVisible(true);
+        renderAlbumView(currentTab, selectedAlbum);
         updatePropertiesPanel();
         return;
     }
@@ -898,7 +965,7 @@ void MainWindow::updateCenterPanel()
                         p->removeTag(t);
                     }
                     // Обновляем UI и сохраняем
-                    currentUser->saveToJson(currentUser->getName() + ".json");
+                    QCoreApplication::processEvents(); currentUser->saveToJson(currentUser->getName() + ".json"); QCoreApplication::processEvents();
                     populateTags();
                     updateCenterPanel();
                     updatePropertiesPanel();
@@ -1153,6 +1220,9 @@ void MainWindow::showEmptyState()
         delete oldLayout;
     }
 
+    // Скрываем режимы просмотра на приветственном экране
+    tabWidget->tabBar()->setVisible(false);
+
     QVBoxLayout *layout = new QVBoxLayout(currentTab);
 
     QLabel *emptyLabel = new QLabel("Добро пожаловать,\n" + currentUser->getName() + "!", currentTab);
@@ -1166,7 +1236,7 @@ void MainWindow::showEmptyState()
     hintLabel->setAlignment(Qt::AlignCenter);
     layout->addWidget(hintLabel);
 
-    QPushButton *addBtn = new QPushButton("Добавить фото", currentTab);
+    QPushButton *addBtn = new QPushButton("Добавить", currentTab);
     addBtn->setObjectName("emptyAddButton");
     addBtn->setMenu(addButton->menu());
     addBtn->setFixedSize(200, 44);
@@ -1488,8 +1558,60 @@ Album *MainWindow::getOrCreateYearAlbum(int year)
 void MainWindow::rebuildAlbumsTree()
 {
     albumsTree->clear();
-    for (Album *year : currentUser->getRootAlbum()->getSubAlbums())
-        populateTree(year);
+
+    // Группируем под-альбомы корня по годам для дерева (чтобы показать хронологию)
+    QMap<QString, QList<Album *>> byYear;
+    QList<Album *> rootSubs = currentUser->getRootAlbum()->getSubAlbums();
+    QRegExp exactYear("^(\\d{4})$");
+    QRegExp anyYear("(\\d{4})");
+
+    for (Album *sub : rootSubs)
+    {
+        QString yearKey = "Альбомы";
+        if (exactYear.indexIn(sub->getName()) != -1)
+        {
+            yearKey = exactYear.cap(1);
+            // если контейнер — показываем его дочерние альбомы
+            if (!sub->getSubAlbums().isEmpty())
+            {
+                for (Album *inner : sub->getSubAlbums())
+                    byYear[yearKey].append(inner);
+                continue;
+            }
+        }
+        else if (anyYear.indexIn(sub->getName()) != -1)
+        {
+            yearKey = anyYear.cap(1);
+        }
+        else
+        {
+            yearKey = QString::number(sub->getYear());
+        }
+        byYear[yearKey].append(sub);
+    }
+
+    // Создаём узлы года и наполняем их
+    QList<QString> keys = byYear.keys();
+    std::sort(keys.begin(), keys.end(), [](const QString &a, const QString &b)
+              {
+        bool aNum = (a.toInt() > 0);
+        bool bNum = (b.toInt() > 0);
+        if (aNum && bNum) return a.toInt() > b.toInt();
+        if (aNum) return true;
+        if (bNum) return false;
+        return a.toLower() < b.toLower(); });
+
+    for (const QString &k : keys)
+    {
+        QTreeWidgetItem *yearItem = new QTreeWidgetItem(albumsTree);
+        yearItem->setText(0, k);
+        // year node — не содержит реального Album* (используется как заголовок)
+        for (Album *a : byYear[k])
+            populateTree(a, yearItem);
+    }
+
+    // Разворачиваем корневые элементы со временем (чтобы пользователь видел годовые контейнеры)
+    albumsTree->expandAll();
 }
 
 void MainWindow::renderAlbumView(QWidget *container, Album *album)
@@ -1500,10 +1622,42 @@ void MainWindow::renderAlbumView(QWidget *container, Album *album)
         containerLayout = new QVBoxLayout(container);
     }
 
-    // Заголовок альбома
-    QLabel *titleLabel = new QLabel("Альбомы/" + album->getName(), container);
+    // Заголовок альбома — отображаем годовой контейнер, если он найден в пути
+    QString yearPart;
+    // Небольшая рекурсивная функция для поиска пути от корня до альбома
+    std::function<bool(Album *, Album *, QStringList &)> findPath = [&](Album *node, Album *target, QStringList &path) -> bool
+    {
+        if (node == target)
+            return true;
+        for (Album *sub : node->getSubAlbums())
+        {
+            path.append(node->getName());
+            if (findPath(sub, target, path))
+                return true;
+            path.removeLast();
+        }
+        return false;
+    };
+    QStringList path;
+    findPath(currentUser->getRootAlbum(), album, path);
+    QRegExp exactYear("^(\\d{4})$");
+    for (const QString &pname : path)
+    {
+        if (exactYear.indexIn(pname) != -1)
+        {
+            yearPart = exactYear.cap(1);
+            break;
+        }
+    }
+
+    QString titleText = yearPart.isEmpty() ? ("Альбомы/" + album->getName()) : ("Альбомы/" + yearPart + "/" + album->getName());
+
+    QLabel *titleLabel = new QLabel(titleText, container);
     titleLabel->setObjectName("albumTitle");
     containerLayout->addWidget(titleLabel);
+
+    // Обновляем заголовок окна под текущий альбом
+    setWindowTitle(titleText);
 
     QScrollArea *scrollArea = new QScrollArea(container);
     scrollArea->setWidgetResizable(true);
@@ -1675,10 +1829,26 @@ QWidget *MainWindow::createAlbumCard(Album *album, QWidget *parent)
                     selectedAlbum = nullptr;
                     rebuildAlbumsTree();
                     updateCenterPanel();
+
+                    // Закрываем полноэкранный просмотр, если он содержит фото из удаляемого альбома
+                    if (fullScreenDialog && !fullScreenPhotos.isEmpty()) {
+                        QList<Photo *> photosInAlbum = manager.getAllPhotos(album);
+                        for (Photo *p : photosInAlbum) {
+                            if (fullScreenPhotos.contains(p)) {
+                                fullScreenDialog->close();
+                                break;
+                            }
+                        }
+                    }
+
                     delete album;
 
                     // Сохраняем состояние
-                    currentUser->saveToJson(currentUser->getName() + ".json");
+                    QCoreApplication::processEvents(); currentUser->saveToJson(currentUser->getName() + ".json"); QCoreApplication::processEvents();
+
+                    // Обновляем счётчик в шапке
+                    int photoCountAfterDel = manager.getAllPhotos(currentUser->getRootAlbum()).size();
+                    userLabel->setText(currentUser->getName() + "\nЛокальное хранилище: " + QString::number(photoCountAfterDel) + " фото");
                 }
             }
         } });
@@ -1785,7 +1955,9 @@ void MainWindow::addToFavorites(Photo *photo)
         // Обновляем представление и сохраняем изменения в user.json
         updateCenterPanel();
         saveFavorites();
+        QCoreApplication::processEvents();
         currentUser->saveToJson(currentUser->getName() + ".json");
+        QCoreApplication::processEvents();
         QMessageBox::information(this, "Избранное", "Фото добавлено в избранное");
     }
 }
@@ -1882,6 +2054,11 @@ void MainWindow::dropEvent(QDropEvent *event)
             int photoCount = manager.getAllPhotos(currentUser->getRootAlbum()).size();
             userLabel->setText(currentUser->getName() + "\nЛокальное хранилище: " +
                                QString::number(photoCount) + " фото");
+
+            // Сохраняем состояние пользователя
+            QCoreApplication::processEvents();
+            currentUser->saveToJson(currentUser->getName() + ".json");
+            QCoreApplication::processEvents();
 
             // Показываем уведомление
             QString message;
@@ -2128,6 +2305,13 @@ void MainWindow::removePhotoReferences(Photo *photo)
 
     // Persist favorites if changed
     saveFavorites();
+
+    // Обновляем счётчик в шапке (если пользователь всё ещё активен)
+    if (currentUser)
+    {
+        int photoCount = manager.getAllPhotos(currentUser->getRootAlbum()).size();
+        userLabel->setText(currentUser->getName() + "\nЛокальное хранилище: " + QString::number(photoCount) + " фото");
+    }
 }
 
 void MainWindow::removePhotosReferencesFromList(const QList<Photo *> &photos)
